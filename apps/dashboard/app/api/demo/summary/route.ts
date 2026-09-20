@@ -27,6 +27,8 @@ type DemoAgent = {
   label: string;
   team: string;
   blurb: string;
+  // The real-world problem this agent proves (shown on cards + detail).
+  problem: string;
   memberAgentIds: string[];
 };
 
@@ -36,6 +38,7 @@ export const DEMO_AGENTS: DemoAgent[] = [
     label: "support-bot",
     team: "support",
     blurb: "Repeat-prone customer FAQs (cache bait incl. near-duplicates).",
+    problem: "Support teams pay frontier prices to re-answer the same questions — semantic caching serves repeats for $0.",
     memberAgentIds: ["support-bot"],
   },
   {
@@ -43,6 +46,7 @@ export const DEMO_AGENTS: DemoAgent[] = [
     label: "ticket-classifier",
     team: "support",
     blurb: "Simple task on the cheapest tier.",
+    problem: "Trivial classification burns flagship tokens — tier routing cuts it ~98% with no accuracy loss.",
     memberAgentIds: ["ticket-classifier"],
   },
   {
@@ -50,6 +54,7 @@ export const DEMO_AGENTS: DemoAgent[] = [
     label: "summarizer",
     team: "content",
     blurb: "Long-input article summaries, moderate tier.",
+    problem: "Long contexts are the priciest tokens — right-sizing the model tier tames per-article cost.",
     memberAgentIds: ["summarizer"],
   },
   {
@@ -57,6 +62,7 @@ export const DEMO_AGENTS: DemoAgent[] = [
     label: "code-reviewer",
     team: "engineering",
     blurb: "Tier by complexity (haiku simple, sonnet complex).",
+    problem: "One-size-fits-all models waste money — complexity-aware tiers match spend to difficulty.",
     memberAgentIds: ["code-reviewer"],
   },
   {
@@ -64,6 +70,7 @@ export const DEMO_AGENTS: DemoAgent[] = [
     label: "research-agent",
     team: "engineering",
     blurb: "3 chained steps: planner → researcher → writer (chain headers).",
+    problem: "Multi-step swarms multiply cost and can loop forever — topology routing + chain budgets + loop kill keep them safe.",
     memberAgentIds: ["planner", "researcher", "writer"],
   },
 ];
@@ -148,12 +155,21 @@ export async function GET() {
         if (row.last_seen && (!lastSeen || row.last_seen > lastSeen)) lastSeen = row.last_seen;
       }
       for (const m of modelsByAgent.get(member) ?? []) {
-        modelPath.push({
-          model: m.model,
-          spend: num(m.spend),
-          requests: num(m.requests),
-          tokens: num(m.tokens),
-        });
+        const found = modelPath.find((p) => p.model === m.model);
+        if (found) {
+          // Two member agents on the same model (e.g. planner + writer):
+          // merge so model keys stay unique downstream.
+          found.spend += num(m.spend);
+          found.requests += num(m.requests);
+          found.tokens += num(m.tokens);
+        } else {
+          modelPath.push({
+            model: m.model,
+            spend: num(m.spend),
+            requests: num(m.requests),
+            tokens: num(m.tokens),
+          });
+        }
       }
     }
     modelPath.sort((a, b) => b.spend - a.spend);
@@ -165,6 +181,7 @@ export async function GET() {
       label: demo.label,
       team: demo.team,
       blurb: demo.blurb,
+      problem: demo.problem,
       memberAgentIds: demo.memberAgentIds,
       hasTraffic: requests > 0,
       requests,

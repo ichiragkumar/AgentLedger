@@ -43,6 +43,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: "/topology", label: "Topology", badge: "Phase 5" },
       { href: "/demo", label: "Demo" },
+      { href: "/integrations", label: "Integrations" },
     ],
   },
 ];

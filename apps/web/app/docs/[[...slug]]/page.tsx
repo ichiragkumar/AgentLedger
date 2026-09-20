@@ -20,6 +20,9 @@ interface DocEntry {
 
 const DOCS: DocEntry[] = [
   { slug: ["getting-started"], title: "Getting Started" },
+  { slug: ["integrations", "dronahq"], title: "DronaHQ Integration" },
+  { slug: ["integrations", "anakin"], title: "Anakin Integration" },
+  { slug: ["integrations", "nasiko"], title: "Nasiko Integration" },
 ];
 
 export async function generateStaticParams() {

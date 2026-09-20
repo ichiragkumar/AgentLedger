@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { useDemoAgent } from "@/lib/hooks/use-demo";
+import { useDemoAgent, useDemoRun } from "@/lib/hooks/use-demo";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,8 @@ export default function DemoAgentPage() {
   const params = useParams<{ agent: string }>();
   const id = decodeURIComponent(params.agent ?? "");
   const [view, setView] = useState<View>("after");
-  const { agent, loading, error } = useDemoAgent(id || null);
+  const { agent, loading, error, refresh } = useDemoAgent(id || null);
+  const { running, lastDirect, runError, run, runWithout, resetOne } = useDemoRun(refresh);
 
   if (loading) return <DetailSkeleton />;
 
@@ -90,34 +91,97 @@ export default function DemoAgentPage() {
               {agent.blurb} Team {agent.team} · member rows:{" "}
               <span className="mono">{agent.memberAgentIds.join(", ")}</span>
             </p>
+            <p className="mt-2 max-w-2xl rounded-md border-l-2 border-indigo-600 bg-indigo-50 px-2.5 py-1.5 text-xs text-zinc-700 dark:border-indigo-400 dark:bg-indigo-950 dark:text-zinc-300">
+              <span className="font-semibold">Problem it solves: </span>
+              {agent.problem}
+            </p>
           </div>
-          <div role="group" aria-label="Before-after view" className="flex overflow-hidden rounded-md border border-zinc-300 dark:border-zinc-700">
-            {(["after", "before"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                aria-pressed={view === v}
-                onClick={() => setView(v)}
-                className={`px-4 py-1.5 text-sm font-medium ${
-                  view === v
-                    ? "bg-indigo-600 text-white"
-                    : "bg-white text-zinc-600 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                }`}
-              >
-                {v === "after" ? "After · metered" : "Before · modeled"}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="Before-after view" className="flex overflow-hidden rounded-md border border-zinc-300 dark:border-zinc-700">
+              {(["after", "before"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={view === v}
+                  onClick={() => setView(v)}
+                  className={`px-4 py-1.5 text-sm font-medium ${
+                    view === v
+                      ? "bg-indigo-600 text-white"
+                      : "bg-white text-zinc-600 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                  }`}
+                >
+                  {v === "after" ? "After · metered" : "Before · modeled"}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={running}
+              onClick={() => void run({ cycles: 1, agent: id })}
+              aria-label={`Run ${id} with AgentLedger now`}
+              title="Through the proxy: metered, attributed, budgeted"
+              className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {running ? "Running…" : "Run with AgentLedger"}
+            </button>
+            <button
+              type="button"
+              disabled={running}
+              onClick={() => void runWithout({ cycles: 1, agent: id })}
+              aria-label={`Run ${id} without AgentLedger now`}
+              title="Direct to provider: billed blind, nothing logged"
+              className="rounded-md border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              {running ? "Running…" : "Run without"}
+            </button>
+            <button
+              type="button"
+              disabled={running}
+              onClick={() => void resetOne(id).then(() => refresh())}
+              aria-label={`Reset ${id} demo data`}
+              title="Deletes this agent's keys and rows (shared team budgets stay)"
+              className="rounded-md px-2 py-1.5 text-sm text-zinc-500 hover:text-red-600 hover:underline disabled:opacity-50"
+            >
+              Reset
+            </button>
           </div>
         </div>
+        {runError && (
+          <p role="alert" className="text-sm text-red-600">Run failed: {runError}</p>
+        )}
+        {lastDirect && (
+          <div role="status" className="rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-950">
+            Direct run — <span className="mono font-semibold">{fmtSpend(lastDirect.modeledSpend)}</span> billed blind
+            ({lastDirect.ok}/{lastDirect.ran} ok{lastDirect.realCalls > 0 ? `, ${lastDirect.realCalls} on a real provider` : ", mock upstream"})
+            · visibility none — refresh to compare against metered.
+          </div>
+        )}
       </div>
 
       {!agent.hasTraffic ? (
         <div className="rounded-xl border border-dashed border-zinc-300 p-6 dark:border-zinc-700">
           <p className="text-sm font-medium">No traffic for {agent.label} yet.</p>
-          <p className="mt-1 text-sm text-zinc-500">
-            Run <span className="mono">python3 demo/seed.py</span> then{" "}
-            <span className="mono">python3 demo/runner.py --once</span> (full order in{" "}
-            <span className="mono">demo/README.md</span>) and reload.
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={running}
+              onClick={() => void run({ cycles: 1, agent: id })}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {running ? "Running…" : "Run with AgentLedger"}
+            </button>
+            <button
+              type="button"
+              disabled={running}
+              onClick={() => void runWithout({ cycles: 1, agent: id })}
+              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              {running ? "Running…" : "Run without"}
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-zinc-500">
+            Terminal alternative: <span className="mono">python3 demo/seed.py</span> then{" "}
+            <span className="mono">python3 demo/runner.py --once</span> (<span className="mono">demo/README.md</span>).
           </p>
         </div>
       ) : (
@@ -154,8 +218,8 @@ export default function DemoAgentPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {agent.modelSplit.map((m) => (
-                    <tr key={m.model} className="border-b border-zinc-100 dark:border-zinc-900">
+                  {agent.modelSplit.map((m, i) => (
+                    <tr key={`${m.model}-${i}`} className="border-b border-zinc-100 dark:border-zinc-900">
                       <td className="mono py-1.5 pr-3">{m.model}</td>
                       <td className="py-1.5 pr-3 text-right text-xs text-zinc-500">{m.tier}</td>
                       <td className="mono py-1.5 pr-3 text-right">{fmtSpend(m.spend)}</td>

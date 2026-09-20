@@ -101,6 +101,8 @@ func TestResolveProviderTable(t *testing.T) {
 		"gemini-1.5-flash": "google", "gemini-2.0-flash": "google", "google/gemini": "google", "gemma-2b": "google",
 		"deepseek-chat": "deepseek", "deepseek-reasoner": "deepseek",
 		"GPT-4O": "openai", "Claude-3-5-Sonnet": "anthropic",
+		"nex-agi/nex-n2.5-mini:free": "openrouter", "qwen/qwen3.8-27b:free": "openrouter",
+		"cohere/north-mini-code:free": "openrouter",
 	}
 	for model, want := range cases {
 		if got := ResolveProvider(model); got != want {

@@ -39,6 +39,7 @@ export type DemoCard = {
   label: string;
   team: string;
   blurb: string;
+  problem: string;
   memberAgentIds: string[];
   hasTraffic: boolean;
   requests: number;
@@ -115,6 +116,7 @@ export type DemoAgentDetail = {
   label: string;
   team: string;
   blurb: string;
+  problem: string;
   memberAgentIds: string[];
   hasTraffic: boolean;
   requests: number;
@@ -133,8 +135,82 @@ export type DemoAgentDetail = {
   keyPrefixes: string[];
 };
 
-export function getDemoSummary(): Promise<DemoSummary> {
-  return fetchJSON<DemoSummary>("/api/demo/summary");
+export type DemoRunStatus = {
+  proxyHealthy: boolean;
+  mockReachable: boolean;
+  proxy: string;
+};
+
+export type DemoRunResult = {
+  ran: number;
+  ok: number;
+  failed: number;
+  agents: string[];
+  cycles: number;
+  warning: string | null;
+};
+
+async function postJSON<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+  let data: unknown = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    const code = (data as { error?: string } | null)?.error ?? `http_${res.status}`;
+    throw new Error(code);
+  }
+  return data as T;
+}
+
+export function getDemoRunStatus(): Promise<DemoRunStatus> {
+  return fetchJSON<DemoRunStatus>("/api/demo/run");
+}
+
+export function runDemoTraffic(opts?: { cycles?: number; agent?: string }): Promise<DemoRunResult> {
+  return postJSON<DemoRunResult>("/api/demo/run", { cycles: opts?.cycles ?? 1, agent: opts?.agent ?? "" });
+}
+
+export type DirectRunResult = {
+  mode: "direct";
+  ran: number;
+  ok: number;
+  failed: number;
+  agents: string[];
+  cycles: number;
+  tokensIn: number;
+  tokensOut: number;
+  modeledSpend: number;
+  realCalls: number;
+  mockReachable: boolean;
+  warning: string | null;
+  visibility: string;
+  perAgent: Record<string, { requests: number; tokensIn: number; tokensOut: number; modeledSpend: number }>;
+};
+
+export function runDirectTraffic(opts?: { cycles?: number; agent?: string }): Promise<DirectRunResult> {
+  return postJSON<DirectRunResult>("/api/demo/run", { mode: "direct", cycles: opts?.cycles ?? 1, agent: opts?.agent ?? "" });
+}
+
+export function resetDemo(): Promise<{ purged: { keys: number; budgets: number; logs: number } }> {
+  return fetch(`/api/demo/run`, { method: "DELETE", cache: "no-store" }).then(async (res) => {
+    if (!res.ok) throw new Error(`http_${res.status}`);
+    return (await res.json()) as { purged: { keys: number; budgets: number; logs: number } };
+  });
+}
+
+export function resetDemoAgent(id: string): Promise<{ purged: { agent: string; keys: number; budgets: number; logs: number } }> {
+  return fetch(`/api/demo/run?agent=${encodeURIComponent(id)}`, { method: "DELETE", cache: "no-store" }).then(async (res) => {
+    if (!res.ok) throw new Error(`http_${res.status}`);
+    return (await res.json()) as { purged: { agent: string; keys: number; budgets: number; logs: number } };
+  });
 }
 
 export function getDemoAgent(id: string): Promise<{ agent: DemoAgentDetail }> {
@@ -168,11 +244,90 @@ export function useDemoSummary() {
   return { summary, loading, error, refresh };
 }
 
+export function getDemoSummary(): Promise<DemoSummary> {
+  return fetchJSON<DemoSummary>("/api/demo/summary");
+}
+
+// --- run hook (action state for the /demo action bar) ---
+
+export function useDemoRun(onDone?: () => void) {
+  const [running, setRunning] = useState(false);
+  const [status, setStatus] = useState<DemoRunStatus | null>(null);
+  const [lastRun, setLastRun] = useState<DemoRunResult | null>(null);
+  const [lastDirect, setLastDirect] = useState<DirectRunResult | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getDemoRunStatus().then(setStatus).catch(() => {});
+  }, []);
+
+  const run = useCallback(
+    async (opts?: { cycles?: number; agent?: string }) => {
+      setRunning(true);
+      setRunError(null);
+      try {
+        const r = await runDemoTraffic(opts);
+        setLastRun(r);
+        setLastDirect(null);
+        onDone?.();
+      } catch (e) {
+        setRunError(e instanceof Error ? e.message : "unavailable");
+      } finally {
+        setRunning(false);
+      }
+    },
+    [onDone]
+  );
+
+  const runWithout = useCallback(
+    async (opts?: { cycles?: number; agent?: string }) => {
+      setRunning(true);
+      setRunError(null);
+      try {
+        const r = await runDirectTraffic(opts);
+        setLastDirect(r);
+        setLastRun(null);
+      } catch (e) {
+        setRunError(e instanceof Error ? e.message : "unavailable");
+      } finally {
+        setRunning(false);
+      }
+    },
+    []
+  );
+
+  const reset = useCallback(async () => {
+    setRunning(true);
+    try {
+      const r = await resetDemo();
+      setLastRun(null);
+      onDone?.();
+      return r;
+    } finally {
+      setRunning(false);
+    }
+  }, [onDone]);
+
+  const resetOne = useCallback(async (id: string) => {
+    setRunning(true);
+    try {
+      const r = await resetDemoAgent(id);
+      onDone?.();
+      return r;
+    } finally {
+      setRunning(false);
+    }
+  }, [onDone]);
+
+  return { running, status, lastRun, lastDirect, runError, run, runWithout, reset, resetOne };
+}
+
 /** Single demo-agent detail (requests, model split, budgets). */
 export function useDemoAgent(id: string | null) {
   const [agent, setAgent] = useState<DemoAgentDetail | null>(null);
   const [loading, setLoading] = useState(!!id);
   const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -192,7 +347,8 @@ export function useDemoAgent(id: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, nonce]);
 
-  return { agent, loading, error };
+  const refresh = useCallback(() => setNonce((n) => n + 1), []);
+  return { agent, loading, error, refresh };
 }

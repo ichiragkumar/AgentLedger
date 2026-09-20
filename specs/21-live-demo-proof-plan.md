@@ -73,3 +73,53 @@ payload-identical through the OpenAI-compatible endpoint).
 - `/demo` renders 5 before/after cards (BEFORE modeled, AFTER metered).
 - Purged after (10 keys incl. leftovers, 3 budgets, 7 log rows); proxy
   restored to normal dev (no mock env).
+
+## Third Live Run — UI-driven (2026-09-20, buttons only, no terminal)
+- `POST /api/demo/run` (same fixtures as `runner.py`, fresh keys per run,
+  idempotent budgets): **7/7 ok**, cards populated (savings 62–96%:
+  summarizer 62.2%, rest 96.0% — cheap-tier routing vs frontier baseline).
+- Per-agent run (`support-bot`): 1/1, served as cache HIT (hit_rate 0.125).
+- `DELETE /api/demo/run`: purged 6 keys, 3 budgets, 7 logs → zero-state.
+- `/demo` is now fully actionable: Run demo, per-card Run now, Reset demo
+  (confirm), live status line (proxy/mock health, last-run tally, warnings).
+
+## Fourth Pass — real provider keys + per-agent With/Without (2026-09-20)
+- `OPENAI_API_KEY` stored in gitignored `.env` + dashboard `.env.local`
+  (server-side only, never logged/returned; user MUST rotate it — pasted in
+  chat). Proxy: OpenAI real, others mock; absolute `PRICES_FILE` (fixed a
+  silent built-in-prices fallback).
+- Routing rule `demo-support-bot-openai` (priority 100, hot-reloaded)
+  pins support-bot → `gpt-4o-mini`; live header proof
+  (`Route: gpt-4o-mini`, rule name, real `chatcmpl-*` id).
+- `REAL_PROVIDERS` map in the run route (env-only keys): with-mode sends
+  mapped agents through the proxy; direct-mode fires mapped agents straight
+  at the real provider (real blind tokens + modeled frontier cost) and the
+  rest at the mock. Fixed a double-`/v1` 404 in direct-real URLs.
+- UI: per-card **With AL** + **Without** buttons; direct panel shows real-call
+  count. Verified: with 7/7, direct-real support-bot 1/1 (22/44 real tokens),
+  direct-mock ticket-classifier 1/1. Zero-state still renders all 5 cards.
+- **proxy 400 root cause:** upstream 400 relayed (real provider, no key) —
+  environmental, not a code bug. Fix: demo stack standardized on mock +
+  mock-env proxy (absolute `PRICES_FILE`, fixing a silent built-in-prices
+  fallback from relative-path CWD); run route errors now name the cause
+  (mock? provider key?); status line already surfaces mock state.
+- **Two buttons (main page):** Run with AgentLedger (metered, persisted) +
+  Run without (direct BEFORE run: same fixtures, frontier-repriced, nothing
+  logged — visibility:none). Direct 7/7 → $0.00745 blind.
+- **Zero-state cards:** the 5 app cards render always (with per-card Run);
+  empty traffic shows a slim notice, not a terminal dump.
+- Traffic left in place (one clean cycle) so `/demo` opens populated.
+
+## Fifth Pass — duplicate keys + detail-page buttons + browser proof (2026-09-20)
+- **Duplicate-key console errors:** summary API now merges same-model member
+  rows (research-agent steps share Flash); React keys index-suffixed on both
+  demo pages. Verification exposed live-router behavior (short prompts →
+  Flash with no rules) — by design, recorded in spec 20.
+- **Detail pages** (`/demo/[agent]`) now carry the same **Run with
+  AgentLedger / Run without** buttons (+ direct-run result panel, run-error
+  alert); `useDemoAgent` gained `refresh()`; no-traffic box has buttons
+  instead of terminal-only instructions.
+- **Browser proof** (agent-browser, authed): both buttons render; clicked
+  Run without → panel shows "Direct run — $0.000405 billed blind (1/1 ok,
+  1 on a real provider)". Purged after (7 keys, 3 budgets, 7 logs).
+  Suite green (Go 8/8, tsc, dashboard build).

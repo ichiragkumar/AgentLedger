@@ -1,0 +1,57 @@
+# AgentLedger routing rules (hot-reloaded every 5s, no restart).
+# See internal/router/rules.go. Empty agent_id/task_type = wildcard.
+# Priority wins; ties break by specificity.
+#
+# Demo (kitchen sink): each agent pinned to its distinct OpenRouter FREE
+# model so the classifier never rewrites demo traffic to another tier.
+# Keys: OPENROUTER_API_KEY (proxy env). Costs meter $0.00 (free tier).
+rules:
+  - id: demo-support-bot
+    agent_id: support-bot
+    task_type: ""
+    model: nex-agi/nex-n2.5-mini:free
+    tier: simple
+    priority: 100
+  - id: demo-ticket-classifier
+    agent_id: ticket-classifier
+    task_type: ""
+    model: liquid/lfm-2.5-2.6b:free
+    tier: simple
+    priority: 100
+  - id: demo-summarizer
+    agent_id: summarizer
+    task_type: ""
+    model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+    tier: moderate
+    priority: 100
+  - id: demo-code-reviewer
+    agent_id: code-reviewer
+    task_type: ""
+    model: cohere/north-mini-code:free
+    tier: complex
+    priority: 100
+  - id: demo-research-agent
+    agent_id: research-agent
+    task_type: ""
+    model: nex-agi/nex-n2.5-pro:free
+    tier: complex
+    priority: 100
+  # research-agent's chained steps carry member agent ids — same app model.
+  - id: demo-planner
+    agent_id: planner
+    task_type: ""
+    model: nex-agi/nex-n2.5-pro:free
+    tier: complex
+    priority: 100
+  - id: demo-researcher
+    agent_id: researcher
+    task_type: ""
+    model: nex-agi/nex-n2.5-pro:free
+    tier: complex
+    priority: 100
+  - id: demo-writer
+    agent_id: writer
+    task_type: ""
+    model: nex-agi/nex-n2.5-pro:free
+    tier: complex
+    priority: 100

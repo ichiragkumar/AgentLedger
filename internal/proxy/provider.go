@@ -1,12 +1,15 @@
 // Provider routing: map the OpenAI `model` field to an upstream.
 //
-// Out of the box: OpenAI, Anthropic, Google. DeepSeek ships as a working
-// stub (same OpenAI-compatible path, own base URL). Unknown models fall
-// through to OpenAI-compatible forwarding so new models keep working.
+// Out of the box: OpenAI, Anthropic, Google, DeepSeek, OpenRouter. DeepSeek
+// ships as a working stub (same OpenAI-compatible path, own base URL).
+// OpenRouter handles vendor/model ids (anything containing "/") —
+// OpenAI-compatible path, own base URL + key. Unknown models fall through
+// to OpenAI-compatible forwarding so new models keep working.
 //
 // Upstream bases are overridable via env for tests / self-hosted gateways:
 //
-//	OPENAI_BASE_URL, ANTHROPIC_BASE_URL, GOOGLE_BASE_URL, DEEPSEEK_BASE_URL
+//	OPENAI_BASE_URL, ANTHROPIC_BASE_URL, GOOGLE_BASE_URL, DEEPSEEK_BASE_URL,
+//	OPENROUTER_BASE_URL
 //
 // Tests use these to point at httptest servers.
 package proxy
@@ -20,10 +23,11 @@ import (
 type Provider string
 
 const (
-	ProviderOpenAI    Provider = "openai"
-	ProviderAnthropic Provider = "anthropic"
-	ProviderGoogle    Provider = "google"
-	ProviderDeepSeek  Provider = "deepseek"
+	ProviderOpenAI     Provider = "openai"
+	ProviderAnthropic  Provider = "anthropic"
+	ProviderGoogle     Provider = "google"
+	ProviderDeepSeek   Provider = "deepseek"
+	ProviderOpenRouter Provider = "openrouter"
 )
 
 func (p Provider) String() string { return string(p) }
@@ -31,7 +35,7 @@ func (p Provider) String() string { return string(p) }
 // AllProviders lists every out-of-the-box upstream. Reused by the Router
 // (Phase 3) for tier tables and by /metrics label documentation.
 func AllProviders() []Provider {
-	return []Provider{ProviderOpenAI, ProviderAnthropic, ProviderGoogle, ProviderDeepSeek}
+	return []Provider{ProviderOpenAI, ProviderAnthropic, ProviderGoogle, ProviderDeepSeek, ProviderOpenRouter}
 }
 
 // IsSupportedModel reports whether model maps to a first-class provider
@@ -39,7 +43,7 @@ func AllProviders() []Provider {
 // models stay routable instead of erroring.
 func IsSupportedModel(model string) bool {
 	switch ResolveProvider(model) {
-	case ProviderOpenAI, ProviderAnthropic, ProviderGoogle, ProviderDeepSeek:
+	case ProviderOpenAI, ProviderAnthropic, ProviderGoogle, ProviderDeepSeek, ProviderOpenRouter:
 		return true
 	default:
 		return false
@@ -48,6 +52,9 @@ func IsSupportedModel(model string) bool {
 
 // ResolveProvider maps a model name to a provider by prefix.
 //
+//   - vendor/model (any other "/")     -> OpenRouter (first-party vendor/
+//     prefixes below keep their native mapping; native bare ids never
+//     contain a slash, so a foreign slash means a gateway-style id)
 //   - gpt-, o1, o3, openai/          -> OpenAI
 //   - claude-, anthropic/             -> Anthropic
 //   - gemini-, google/, gemma-        -> Google
@@ -57,6 +64,10 @@ func IsSupportedModel(model string) bool {
 func ResolveProvider(model string) Provider {
 	m := strings.ToLower(strings.TrimSpace(model))
 	switch {
+	case strings.Contains(m, "/") &&
+		!strings.HasPrefix(m, "openai/") && !strings.HasPrefix(m, "anthropic/") &&
+		!strings.HasPrefix(m, "google/") && !strings.HasPrefix(m, "deepseek/"):
+		return ProviderOpenRouter
 	case strings.HasPrefix(m, "claude-") || strings.HasPrefix(m, "anthropic/"):
 		return ProviderAnthropic
 	case strings.HasPrefix(m, "gemini-") || strings.HasPrefix(m, "google/") || strings.HasPrefix(m, "gemma-"):
@@ -83,6 +94,8 @@ func DefaultUpstreamBase(p Provider) string {
 		return "https://generativelanguage.googleapis.com"
 	case ProviderDeepSeek:
 		return "https://api.deepseek.com"
+	case ProviderOpenRouter:
+		return "https://openrouter.ai/api"
 	default:
 		return "https://api.openai.com"
 	}
@@ -103,6 +116,8 @@ func UpstreamChatCompletionsURL(p Provider) string {
 		envOverride = strings.TrimRight(os.Getenv("GOOGLE_BASE_URL"), "/")
 	case ProviderDeepSeek:
 		envOverride = strings.TrimRight(os.Getenv("DEEPSEEK_BASE_URL"), "/")
+	case ProviderOpenRouter:
+		envOverride = strings.TrimRight(os.Getenv("OPENROUTER_BASE_URL"), "/")
 	default:
 		envOverride = strings.TrimRight(os.Getenv("OPENAI_BASE_URL"), "/")
 	}
@@ -131,6 +146,8 @@ func UpstreamAPIKeyEnv(p Provider) string {
 		return "GOOGLE_API_KEY"
 	case ProviderDeepSeek:
 		return "DEEPSEEK_API_KEY"
+	case ProviderOpenRouter:
+		return "OPENROUTER_API_KEY"
 	default:
 		return "OPENAI_API_KEY"
 	}

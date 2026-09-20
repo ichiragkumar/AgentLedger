@@ -82,6 +82,20 @@ GitHub OAuth confirmed working locally. Production setup explicitly deferred.
    - Known remaining gap (not fixed): cache HITs skip `request_logs`
      (Observe is MISS-only by design) — hits are counted in `/v1/cache/stats`
      but invisible per-agent. Needs a hook change (follow-up).
+   - **Demo actions (this turn):** `POST/GET/DELETE /api/demo/run`
+     (fixture-identical traffic, fresh keys per run, idempotent budgets,
+     purge) + hook (`useDemoRun`) + UI (Run demo, per-card Run now, Reset
+     with confirm, live status line). Proven UI-only: 7/7, cards 62–96%
+     savings, per-agent HIT, reset → zero-state. (The earlier Go FAIL scare
+     was a wrong-cwd invocation — root suite is 8/8 green.)
+   - **Duplicate-key fix:** `/api/demo/summary` merges same-model members
+     (research-agent steps shared Flash) + index-suffixed React keys on both
+     demo pages. Verification surfaced a REAL behavior, not a bug: with no
+     routing rules, the live classifier sends short prompts to
+     `gemini-2.0-flash` (`X-AgentLedger-Route/Tier/Complexity` headers prove
+     it) — so demo cards genuinely show 96% routing savings. Follow-up
+     (not fixed): `request_logs` stores only the FINAL model; the requested
+     model isn't logged, so "requested → routed" can't be displayed.
 2. **Manual authed browser pass** over agents/requests/keys/onboarding click
    paths (curl was anon).
 3. **Token-adoption sweep** (report ready): hardcoded `indigo-*`/`zinc-*`/hex
@@ -113,6 +127,15 @@ stub banners flip and E2E stays green. Awaiting **go** — no code changes
 until then.
 
 ## Decisions Log
+- Ecosystem integrations (5 agents, all verified): DronaHQ seams researched
+  (LLM-traffic insertion NOT-SUPPORTED — closed provider list; Tool Builder /
+  Code-fetch / MCP are WORKS at tool level), Anakin + Nasiko guides written
+  (Nasiko seam VERIFIED-BY-CODE: `llm-router/src/inject.rs` honors
+  `OPENAI_BASE_URL`, CrewAI templates covered), `/integrations` dashboard
+  page + registry API live (sidebar linked), live verification PASS
+  (3 platform-shaped payloads metered $0.0001117, purged), web docs for all
+  three (SSG 18/18) + `specs/22-ecosystem-integrations.md` (Nasiko LIVE,
+  DronaHQ/Anakin WIRED-NEEDS-ACCOUNT + eligibility one-liners).
 - Web roles ran on `general` workers (no `ledger-web-*` Task types exist); ownership enforced via prompts + AGENTS.md.
 - Nested `apps/web/.git` removed (broke turbopack); nested `apps/dashboard/package-lock.json` removed (single lockfile).
 - `proxy.ts` over `middleware.ts` (Next 16 deprecation, per vendored docs).

@@ -21,43 +21,8 @@ const BASELINE_MODEL = "gpt-4o";
 const BASELINE_INPUT_PER_1M = 2.5;
 const BASELINE_OUTPUT_PER_1M = 10.0;
 
-// Catalog duplicated from summary route (routes stay sibling-independent;
-// NEW files only — no shared edits). Mirrors demo/runner.py.
-const DEMO_AGENTS: Record<
-  string,
-  { label: string; team: string; blurb: string; memberAgentIds: string[] }
-> = {
-  "support-bot": {
-    label: "support-bot",
-    team: "support",
-    blurb: "Repeat-prone customer FAQs (cache bait incl. near-duplicates).",
-    memberAgentIds: ["support-bot"],
-  },
-  "ticket-classifier": {
-    label: "ticket-classifier",
-    team: "support",
-    blurb: "Simple task on the cheapest tier.",
-    memberAgentIds: ["ticket-classifier"],
-  },
-  summarizer: {
-    label: "summarizer",
-    team: "content",
-    blurb: "Long-input article summaries, moderate tier.",
-    memberAgentIds: ["summarizer"],
-  },
-  "code-reviewer": {
-    label: "code-reviewer",
-    team: "engineering",
-    blurb: "Tier by complexity (haiku simple, sonnet complex).",
-    memberAgentIds: ["code-reviewer"],
-  },
-  "research-agent": {
-    label: "research-agent",
-    team: "engineering",
-    blurb: "3 chained steps: planner → researcher → writer (chain headers).",
-    memberAgentIds: ["planner", "researcher", "writer"],
-  },
-};
+// Agent catalog: single source in the summary route (problem copy included).
+import { DEMO_AGENTS } from "../../summary/route";
 
 // Inferred routing tier per model family (spec 17 §Routing). Labeled
 // `inferred` — rule-decision provenance is pending chain patches.
@@ -119,7 +84,7 @@ function budgetState(utilPct: number): "ok" | "notice" | "watch" | "exceeded" {
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const key = decodeURIComponent(id ?? "").trim();
-  const demo = DEMO_AGENTS[key];
+  const demo = DEMO_AGENTS.find((d) => d.id === key);
   if (!demo) return Response.json({ error: "not_found", agent: null }, { status: 404 });
 
   const members = demo.memberAgentIds;
@@ -209,6 +174,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       label: demo.label,
       team: demo.team,
       blurb: demo.blurb,
+      problem: demo.problem,
       memberAgentIds: members,
       hasTraffic: totalRequests > 0,
       requests: totalRequests,
