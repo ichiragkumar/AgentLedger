@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Raw shadcn — NEVER modify (re-install on upgrade). Owner: ledger-web-system.
@@ -119,7 +120,7 @@ function DialogContent({
             aria-label="Close"
             className="absolute right-4 top-4 rounded-sm text-muted-foreground transition-opacity hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            ✕
+            <X size={16} aria-hidden />
           </button>
         </div>
       </div>

@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Menu, X } from "lucide-react";
 import ThemeToggle from "@/components/theme-toggle";
 
 type NavItem = { href: string; label: string; badge?: string };
@@ -74,9 +75,9 @@ export default function Sidebar() {
         type="button"
         aria-label="Open navigation"
         onClick={() => setMobileOpen(true)}
-        className="fixed bottom-4 left-4 z-40 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-medium shadow-lg lg:hidden dark:border-zinc-700 dark:bg-zinc-950"
+        className="fixed bottom-4 left-4 z-40 inline-flex items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-medium shadow-lg lg:hidden dark:border-zinc-700 dark:bg-zinc-950"
       >
-        ☰ Menu
+        <Menu size={16} aria-hidden /> Menu
       </button>
 
       {/* Mobile overlay: outside-click close. */}
@@ -112,7 +113,7 @@ export default function Sidebar() {
             onClick={() => setMobileOpen(false)}
             className="rounded-md border border-zinc-300 px-2 py-1 text-xs lg:hidden dark:border-zinc-700"
           >
-            ✕
+            <X size={14} aria-hidden />
           </button>
         </div>
 

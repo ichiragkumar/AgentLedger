@@ -18,7 +18,8 @@ Live: proxy `:8787` (PG-backed) · dashboard `:3000` (200, real data) · web `:3
 - **Integrator fixes:** `lib/db.ts` schema paths → `../../db/`; purged backend test rows; `apps/dashboard/.env.local` (AUTH_SECRET generated, gitignored); fixed web `LayoutProps` + budget-panel Tooltip types.
 
 ## What's Left
-1. **Proxy management plane** (Go, blocks backend stubs): `GET/POST /v1/budgets`, `PUT/DELETE /v1/budgets/{id}`, `GET/POST /v1/alerts`, `GET /v1/audit`, key-vault API (issue/list-prefix/revoke/rotate), cache stats/config — backend verified `/v1/*` → 404 today.
+1. ~~**Proxy management plane**~~ DONE (this block): `GET/POST /v1/budgets`, `PUT/DELETE /v1/budgets/{id}`, `GET/POST /v1/alerts`, `DELETE /v1/alerts/{id}`, `GET /v1/audit`, `GET/POST /v1/policies*` (via enforce `RegisterRoutes`) + key vault `POST/GET /v1/keys`, `DELETE /v1/keys/{id}`, `POST /v1/keys/{id}/rotate`. Vault: `internal/auth/vault.go` (sha256-only storage, PG or memory, grace on rotate, `last_used_at` touch); data plane accepts vault keys (fallback after MapResolver); optional `MGMT_TOKEN` bearer gate. Proven live: issue→list(prefix-only)→use-on-dataplane→rotate→revoke→list-states. Dashboard stubs (`/api/budgets|alerts|keys` 503s) now have a real backend at `PROXY_MGMT_BASE` — remaining: point dashboard fetchers at it.
+2. **GitHub OAuth** DONE (local): `GITHUB_ID/SECRET` in gitignored `.env.local`, provider live. Production: register callback (below) in the GitHub App.
 2. **Dashboard:** ~~`(auth)` login/signup UI~~ DONE (dev-login + GitHub button, prefilled); loading skeletons still open (dashboard worker offered); wire `use-overview/use-realtime` into Overview; adopt tokens/`@agentledger/ui` (hardcoded `#22c55e` etc.); reactflow decision; `app/api/waitlist` adoption (journey's stub, same-segment rule).
 3. **Decisions for human:** spec 10 vs 15 pricing tiers (4-tier+Business $199 vs 3-tier Pro 5M — journey holds spec 15); enterprise Calendly URL/email placeholders; `drizzle-orm` vs `pg` (backend kept `pg`); GitHub repo slug confirmed `ichiragkumar/AgentLedger`.
 4. **Proof:** F4 realtime e2e (request→dashboard ≤5s live, breach toast ≤60s), F5 SEO/OG + WCAG audit + Lighthouse CI.
@@ -30,7 +31,9 @@ Live: proxy `:8787` (PG-backed) · dashboard `:3000` (200, real data) · web `:3
 - Plain fetch/EventSource over react-query (fewer deps, same contract).
 - Test PG rows purged; smoke/demo traffic retained.
 - Dev login: `dev-login` Credentials provider (ALLOW_DEV_LOGIN-gated, env defaults) + prefilled `/login`; verified accept + reject + authed `/overview`.
-- Console-error fixes: theme init uses `next/Script beforeInteractive` (raw `<script>` in layout is illegal); topology `<title>` single-expression (multiline JSX text hydrated differently); `suppressHydrationWarning` retained for extension-injected attrs (Grammarly).
+- Login root-causes fixed: Auth.js v5 requires `AUTH_GITHUB_ID/SECRET` (not v4 `GITHUB_*` — both set now); GitHub signin must be POST (my GET probe gave a false `Configuration` alarm — real flow 302s to github.com with correct `redirect_uri`); full `next dev` parent restart required for env pickup (child-only kill keeps stale env).
+- No-emoji pass: 6 files swapped to lucide-react (`Sun/Moon/Menu/X/Check`; pricing table uses "Yes"); `lucide-react` added to both apps; glyph scan = 0. Theme/fonts consistent: spec-18 tokens in both apps, Inter+JetBrains Mono (web) / Geist (dashboard) via `next/font`, `.mono` money, class-based dark toggle.
+- Console-error fixes: theme init uses `next/Script beforeInteractive` (raw `<script>` in layout is illegal); topology `<title>` single-expression (multiline JSX text hydrated differently); `suppressHydrationWarning` retained for extension-injected attrs (Grammarly) — applied to BOTH apps' root layouts (dashboard + web).
 - GitHub slug corrected to `ichiragkumar/AgentLedger` (was `anomalyco/*`, copied from tool docs).
 
 ## Two-App Journey (how :3001 + :3000 fit)

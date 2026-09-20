@@ -107,6 +107,9 @@ func New(cfg Config) *Proxy {
 // Metrics exposes the registry for /metrics.
 func (p *Proxy) Metrics() *Metrics { return p.metrics }
 
+// Vault exposes the key vault for management-plane mounting (may be nil).
+func (p *Proxy) Vault() *auth.Vault { return p.vault }
+
 // minimalRequest is the parsed subset used for routing decisions.
 // The raw body is always forwarded verbatim.
 type minimalRequest struct {

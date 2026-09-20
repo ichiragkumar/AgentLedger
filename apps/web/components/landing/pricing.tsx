@@ -14,6 +14,7 @@
  */
 
 import { useState } from "react";
+import { Check } from "lucide-react";
 
 export interface PricingTier {
   name: string;
@@ -139,7 +140,7 @@ export function Pricing() {
               <ul className="mt-4 flex-1 space-y-2">
                 {tier.features.map((f) => (
                   <li key={f} className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                    <span aria-hidden className="text-green-500">✓</span> {f}
+                    <Check size={14} aria-hidden className="shrink-0 text-green-500" /> {f}
                   </li>
                 ))}
               </ul>
@@ -181,8 +182,8 @@ export function Pricing() {
               ["Price", "$0", annual ? "$39/mo annual" : "$49/mo", "Custom"],
               ["Teams", "1", "Unlimited", "Unlimited"],
               ["Logged requests", "500K", "5M", "Unlimited"],
-              ["Smart routing", "—", "✓", "✓ + topology-aware"],
-              ["Budget enforcement", "—", "✓", "✓ + policies"],
+              ["Smart routing", "—", "Yes", "Yes + topology-aware"],
+              ["Budget enforcement", "—", "Yes", "Yes + policies"],
               ["Support", "Community", "Email", "Dedicated engineer"],
               ["Compliance", "—", "—", "SSO + SOC 2"],
             ].map(([feature, free, pro, ent]) => (

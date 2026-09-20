@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { Check } from "lucide-react";
 
 export type PhaseStatus = "live" | "beta" | "building" | "planned";
 
@@ -215,7 +216,7 @@ export function ProductJourney() {
             <ul className="mt-4 space-y-1.5">
               {phase.checklist.map((item) => (
                 <li key={item} className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                  <span aria-hidden className="text-green-500">✓</span> {item}
+                  <Check size={14} aria-hidden className="shrink-0 text-green-500" /> {item}
                 </li>
               ))}
             </ul>

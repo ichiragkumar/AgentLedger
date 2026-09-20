@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -61,6 +62,7 @@ func run() error {
 	p := proxy.New(proxy.Config{
 		Pricing: reg,
 		Auth:    auth.NewMapResolverFromEnv(),
+		Vault:   newVault(),
 		Log:     logger.NewFromEnv(),
 		Metrics: proxy.NewMetrics(),
 		Version: version,
@@ -71,9 +73,13 @@ func run() error {
 	// Timeouts: ReadHeaderTimeout + ReadTimeout mitigate slow-loris on the
 	// ingress side. Deliberately NO WriteTimeout: SSE streams stay open for
 	// minutes and WriteTimeout would kill them mid-stream.
+	mux := proxy.NewMux(p)
+	// Management plane: budgets/alerts/audit (enforce) + key vault.
+	// Nil-safe: MountMgmt skips whatever is absent.
+	proxy.MountMgmt(mux, enforce.NewAPI(), p.Vault())
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           proxy.NewMux(p),
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		IdleTimeout:       120 * time.Second,
@@ -101,6 +107,24 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return srv.Shutdown(ctx)
+}
+
+// newVault builds the key vault: Postgres-backed when DATABASE_URL is set
+// AND reachable, else in-memory. Presence-only logging, never secrets.
+func newVault() *auth.Vault {
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if pool, err := pgxpool.New(ctx, dsn); err == nil {
+			if err := pool.Ping(ctx); err == nil {
+				log.Printf("proxy: key vault postgres-backed")
+				return auth.NewVault(pool)
+			}
+			pool.Close()
+		}
+		log.Printf("proxy: key vault in-memory (postgres unreachable)")
+	}
+	return auth.NewVault(nil)
 }
 
 // normalizePort keeps a bad PORT from crashing the process with a confusing
