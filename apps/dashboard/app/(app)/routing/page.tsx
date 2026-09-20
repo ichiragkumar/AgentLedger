@@ -14,7 +14,14 @@ import { useRouting, type RoutingRule } from "@/lib/hooks/use-routing";
 
 export const dynamic = "force-dynamic";
 
-const PIE_COLORS = ["#22c55e", "#38bdf8", "#a78bfa", "#f59e0b", "#ef4444", "#94a3b8"];
+const PIE_COLORS = [
+  "hsl(var(--savings))", // cheap tiers — green (tier semantics preserved)
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-5))",
+  "hsl(var(--warning))",
+  "hsl(var(--overspend))", // frontier — red (expensive)
+  "hsl(var(--muted-foreground))",
+];
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
@@ -108,9 +115,9 @@ function highlightYaml(text: string): { __html: string } {
       const comment = hash >= 0 ? line.slice(hash) : "";
       const marked = esc(code).replace(
         /(^|\s)(rules:|-\s|(?:id|agent_id|task_type|model|tier|priority)(?=:))/g,
-        '$1<span class="text-indigo-500 font-semibold">$2</span>'
+        '$1<span class="text-primary font-semibold">$2</span>'
       );
-      return marked + (comment ? `<span class="text-zinc-400 italic">${esc(comment)}</span>` : "");
+      return marked + (comment ? `<span class="text-muted-foreground italic">${esc(comment)}</span>` : "");
     })
     .join("\n");
   return { __html: html + "\n" };
@@ -348,7 +355,7 @@ export default function RoutingPage() {
               type="button"
               onClick={() => void onSaveTiers()}
               disabled={savingTiers}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
               {savingTiers ? "Saving…" : "Save tiers"}
             </button>
@@ -359,9 +366,9 @@ export default function RoutingPage() {
             <div key={t.id} className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
               <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">{t.id}</p>
               <p className="mono mt-1 text-sm font-bold">{tierDraft[t.id] ?? t.model}</p>
-              <p className="mono text-xs text-emerald-600">
+              <p className="mono text-xs text-savings">
                 ${t.blendedPer1M.toFixed(t.blendedPer1M < 0.1 ? 3 : 2)} / 1M
-                {!t.known && <span className="text-amber-600"> · unpriced</span>}
+                {!t.known && <span className="text-warning"> · unpriced</span>}
               </p>
               <p className="mt-1 text-xs text-zinc-500">{t.description}</p>
               <label className="mt-2 block text-xs text-zinc-500">
@@ -475,7 +482,7 @@ export default function RoutingPage() {
               type="button"
               onClick={() => void onSaveYaml()}
               disabled={savingYaml}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
               {savingYaml ? "Saving…" : "Save rules"}
             </button>
@@ -523,7 +530,7 @@ export default function RoutingPage() {
                               .catch((e: unknown) => flash("err", e instanceof Error ? e.message : "update failed"))
                               .finally(() => setRuleBusy(false));
                           }}
-                          className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+                          className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
                         >
                           Save
                         </button>
@@ -598,7 +605,7 @@ export default function RoutingPage() {
                 .catch((e: unknown) => flash("err", e instanceof Error ? e.message : "create failed"))
                 .finally(() => setRuleBusy(false));
             }}
-            className="mt-2 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            className="mt-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
             Add rule
           </button>
@@ -611,7 +618,7 @@ export default function RoutingPage() {
               type="button"
               onClick={() => void onSaveFallback()}
               disabled={savingFallback}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
               {savingFallback ? "Saving…" : "Save order"}
             </button>

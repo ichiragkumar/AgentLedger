@@ -23,7 +23,7 @@ export default function SpendByAgent({ rows }: { rows: SpendByAgentRow[] }) {
           <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v: number) => `$${v}`} />
           <YAxis type="category" dataKey="agent" width={110} tick={{ fontSize: 12 }} />
           <Tooltip formatter={(v: unknown) => `$${Number(v ?? 0).toFixed(2)}`} />
-          <Bar dataKey="spend" name="Spend (USD)" fill="#34d399" radius={[0, 6, 6, 0]} />
+          <Bar dataKey="spend" name="Spend (USD)" fill="hsl(var(--savings))" radius={[0, 6, 6, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

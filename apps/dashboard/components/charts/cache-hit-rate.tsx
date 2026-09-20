@@ -24,8 +24,8 @@ export default function CacheHitRate({ series }: { series: CacheHitRatePoint[] }
           <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} domain={[0, 100]} />
           <Tooltip formatter={(v: unknown) => `${Number(v ?? 0).toFixed(1)}%`} />
           <Legend />
-          <Line type="monotone" dataKey="exact" name="Exact hit %" stroke="#38bdf8" dot={false} strokeWidth={2} />
-          <Line type="monotone" dataKey="semantic" name="Semantic hit %" stroke="#a78bfa" dot={false} strokeWidth={2} />
+          <Line type="monotone" dataKey="exact" name="Exact hit %" stroke="hsl(var(--chart-1))" dot={false} strokeWidth={2} />
+          <Line type="monotone" dataKey="semantic" name="Semantic hit %" stroke="hsl(var(--chart-5))" dot={false} strokeWidth={2} />
         </LineChart>
       </ResponsiveContainer>
     </div>

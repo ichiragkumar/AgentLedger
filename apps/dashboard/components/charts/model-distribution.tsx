@@ -15,7 +15,14 @@ export interface ModelDistributionRow {
   requests: number;
 }
 
-const SLICE_COLORS = ["#22c55e", "#38bdf8", "#a78bfa", "#f59e0b", "#ef4444", "#94a3b8"];
+const SLICE_COLORS = [
+  "hsl(var(--savings))", // cheap tiers — green (tier semantics preserved)
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-5))",
+  "hsl(var(--warning))",
+  "hsl(var(--overspend))", // frontier — red (expensive)
+  "hsl(var(--muted-foreground))",
+];
 
 export default function ModelDistribution({ rows }: { rows: ModelDistributionRow[] }) {
   const [selected, setSelected] = useState<string | null>(null);
@@ -50,7 +57,7 @@ export default function ModelDistribution({ rows }: { rows: ModelDistributionRow
                 type="button"
                 aria-pressed={active}
                 onClick={() => setSelected(active ? null : r.model)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-xs ${active ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-950" : "border-zinc-300 dark:border-zinc-700"}`}
+                className={`mono inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${active ? "border-primary bg-primary/10" : "border-zinc-300 dark:border-zinc-700"}`}
               >
                 <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: SLICE_COLORS[i % SLICE_COLORS.length] }} />
                 {r.model} · {total > 0 ? ((r.spend / total) * 100).toFixed(0) : "0"}%

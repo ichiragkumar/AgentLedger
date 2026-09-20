@@ -50,9 +50,9 @@ export interface TopologyPanelProps {
 }
 
 const TIER_COLOR: Record<TopologyStep['tier'], string> = {
-  frontier: '#a855f7', // purple — high-stakes, best model
-  standard: '#38bdf8', // blue — mid tier
-  cheap: '#34d399', // green — low-stakes, cheapest
+  frontier: 'hsl(var(--chart-5))', // purple — high-stakes, best model
+  standard: 'hsl(var(--chart-1))', // blue — mid tier
+  cheap: 'hsl(var(--savings))', // green — low-stakes, cheapest
 };
 
 const NODE_W = 148;
@@ -110,7 +110,7 @@ export default function TopologyPanel({
           const x2 = b.x;
           const y2 = b.y + NODE_H / 2;
           const mx = (x1 + x2) / 2;
-          return <path key={i} d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`} fill="none" stroke="#64748b" strokeWidth={1.5} opacity={0.8} />;
+          return <path key={i} d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`} fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} opacity={0.8} />;
         })
         .filter(Boolean),
     [edges, layout],
@@ -120,9 +120,9 @@ export default function TopologyPanel({
     <section aria-label={`Workflow topology for ${chainId}`} className="rounded-xl border p-4">
       <header className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <h2 className="text-sm font-semibold">Workflow: {chainId}</h2>
-        {expectedTotalUsd !== undefined && <span className="text-xs text-muted-foreground">expected {fmtUsd(expectedTotalUsd)} incl. retry</span>}
+        {expectedTotalUsd !== undefined && <span className="mono text-xs text-muted-foreground">expected {fmtUsd(expectedTotalUsd)} incl. retry</span>}
         {savingsVsUniform !== undefined && (
-          <span className="text-xs font-medium text-emerald-600">−{(savingsVsUniform * 100).toFixed(0)}% vs uniform-frontier</span>
+          <span className="text-xs font-medium text-savings">−{(savingsVsUniform * 100).toFixed(0)}% vs uniform-frontier</span>
         )}
         <span className="ml-auto text-xs text-muted-foreground">
           {steps.length} steps · {edges.length} edges
@@ -138,15 +138,15 @@ export default function TopologyPanel({
           return (
             <g key={s.id} transform={`translate(${p.x},${p.y})`}>
               <title>{`${s.id} · ${s.model} · cost ${fmtUsd(s.costUsd)} · quality ${(s.quality * 100).toFixed(0)}% · fail ${(s.failureRate * 100).toFixed(1)}% · criticality ${s.criticality.toFixed(2)} (${s.tier})`}</title>
-              <rect width={NODE_W} height={NODE_H} rx={10} fill="var(--card, #0f172a)" stroke={color} strokeWidth={2} />
+              <rect width={NODE_W} height={NODE_H} rx={10} fill="hsl(var(--card))" stroke={color} strokeWidth={2} />
               <rect width={6} height={NODE_H} rx={3} fill={color} />
               <text x={14} y={20} fontSize={12} fontWeight={700} fill="currentColor">
                 {s.id}
               </text>
-              <text x={14} y={36} fontSize={10.5} fill="#94a3b8">
+              <text x={14} y={36} fontSize={10.5} fill="hsl(var(--muted-foreground))">
                 {s.model}
               </text>
-              <text x={14} y={51} fontSize={10.5} fill="#94a3b8">
+              <text x={14} y={51} fontSize={10.5} fill="hsl(var(--muted-foreground))">
                 {fmtUsd(s.costUsd)} · q{(s.quality * 100).toFixed(0)} · f{(s.failureRate * 100).toFixed(0)}%
               </text>
             </g>

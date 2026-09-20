@@ -40,11 +40,11 @@ export interface BudgetPanelProps {
 }
 
 function statusOf(util: number): { label: string; color: string } {
-  if (util >= 100) return { label: "Hard stop", color: "#ef4444" };
-  if (util >= 90) return { label: "Downgrading", color: "#f59e0b" };
-  if (util >= 75) return { label: "Warning", color: "#f59e0b" };
-  if (util >= 50) return { label: "Watch", color: "#3b82f6" };
-  return { label: "Healthy", color: "#22c55e" };
+  if (util >= 100) return { label: "Hard stop", color: "hsl(var(--overspend))" };
+  if (util >= 90) return { label: "Downgrading", color: "hsl(var(--warning))" };
+  if (util >= 75) return { label: "Warning", color: "hsl(var(--warning))" };
+  if (util >= 50) return { label: "Watch", color: "hsl(var(--chart-1))" };
+  return { label: "Healthy", color: "hsl(var(--savings))" };
 }
 
 const fmtUSD = (n: number) =>
@@ -78,12 +78,12 @@ export function BudgetPanel({
         <div>
           <h2 className="text-lg font-semibold tracking-tight">{teamName}</h2>
           <p className="text-sm text-zinc-500">
-            {fmtUSD(spentUSD)} of {fmtUSD(budgetUSD)} · {updatedAt ? `live as of ${updatedAt}` : "live"}
+            <span className="mono">{fmtUSD(spentUSD)} of {fmtUSD(budgetUSD)}</span> · {updatedAt ? `live as of ${updatedAt}` : "live"}
           </p>
         </div>
         <span
           className="rounded-full px-3 py-1 text-xs font-medium"
-          style={{ backgroundColor: `${status.color}1a`, color: status.color }}
+          style={{ backgroundColor: `color-mix(in srgb, ${status.color} 12%, transparent)`, color: status.color }}
         >
           {status.label} · {utilizationPct.toFixed(1)}%
         </span>
@@ -118,15 +118,15 @@ export function BudgetPanel({
             <Legend />
             <ReferenceLine
               y={budgetUSD}
-              stroke="#ef4444"
+              stroke="hsl(var(--overspend))"
               strokeDasharray="6 3"
-              label={{ value: "budget", fontSize: 11, fill: "#ef4444" }}
+              label={{ value: "budget", fontSize: 11, fill: "hsl(var(--overspend))" }}
             />
             <Line
               type="monotone"
               dataKey="idealCum"
               name="Ideal"
-              stroke="#a1a1aa"
+              stroke="hsl(var(--muted-foreground))"
               strokeDasharray="5 4"
               dot={false}
               strokeWidth={1.5}
@@ -146,9 +146,9 @@ export function BudgetPanel({
       {/* Forecast vs budget */}
       <footer className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
         <span>
-          Forecast: <strong>{fmtUSD(forecastUSD)}</strong>
+          Forecast: <strong className="mono">{fmtUSD(forecastUSD)}</strong>
         </span>
-        <span className={over ? "font-medium text-red-500" : "text-zinc-500"}>
+        <span className={over ? "mono font-medium text-overspend" : "mono text-zinc-500"}>
           {over
             ? `over budget by ${fmtUSD(forecastUSD - budgetUSD)}`
             : `under budget by ${fmtUSD(budgetUSD - forecastUSD)}`}

@@ -215,11 +215,11 @@ export default function BudgetsPage() {
             </label>
             <label className="text-sm">
               <span className="mb-1 block font-medium">Token limit (0 = unlimited)</span>
-              <input name="tokenLimit" type="number" min={0} defaultValue={0} aria-label="Token limit" className="mono w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+              <input name="tokenLimit" type="text" inputMode="numeric" pattern="[0-9]*" defaultValue={0} aria-label="Token limit" className="mono w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
             </label>
             <label className="text-sm">
               <span className="mb-1 block font-medium">Dollar limit (USD)</span>
-              <input name="dollarLimit" type="number" min={0} step="0.01" defaultValue={100} aria-label="Dollar limit" className="mono w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+              <input name="dollarLimit" type="text" inputMode="decimal" defaultValue={100} aria-label="Dollar limit" className="mono w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
             </label>
             <div className="flex items-end">
               <button type="submit" className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white">

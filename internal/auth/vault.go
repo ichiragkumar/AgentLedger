@@ -30,6 +30,10 @@ type KeyInfo struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	Revoked    bool       `json:"revoked"`
+	// GraceExpiresAt is set on a rotated (revoked-but-honored) key; the key
+	// resolves until this time. RotatedFrom links the replacement chain.
+	GraceExpiresAt *time.Time `json:"grace_expires_at,omitempty"`
+	RotatedFrom    string     `json:"rotated_from,omitempty"`
 }
 
 // IssuedKey is returned ONCE at issue/rotate time.
@@ -161,7 +165,8 @@ func (v *Vault) touch(hash string) {
 func (v *Vault) List(ctx context.Context) ([]KeyInfo, error) {
 	if v.pool != nil {
 		rows, err := v.pool.Query(ctx, `SELECT id, name, agent_scope, team_scope,
-			key_prefix, key_last4, created_at, last_used_at, revoked_at IS NOT NULL
+			key_prefix, key_last4, created_at, last_used_at, revoked_at IS NOT NULL,
+			grace_expires_at, COALESCE(rotated_from, '')
 			FROM virtual_keys ORDER BY created_at DESC`)
 		if err != nil {
 			return nil, err
@@ -171,7 +176,8 @@ func (v *Vault) List(ctx context.Context) ([]KeyInfo, error) {
 		for rows.Next() {
 			var k KeyInfo
 			if err := rows.Scan(&k.ID, &k.Name, &k.AgentScope, &k.TeamScope,
-				&k.Prefix, &k.Last4, &k.CreatedAt, &k.LastUsedAt, &k.Revoked); err != nil {
+				&k.Prefix, &k.Last4, &k.CreatedAt, &k.LastUsedAt, &k.Revoked,
+				&k.GraceExpiresAt, &k.RotatedFrom); err != nil {
 				return nil, err
 			}
 			out = append(out, k)
@@ -240,6 +246,8 @@ func (v *Vault) Rotate(ctx context.Context, id string, grace time.Duration) (*Is
 		return nil, fmt.Errorf("vault: rotate: key not found")
 	}
 	e.info.Revoked = true
+	graceUntil := v.nowFunc().UTC().Add(grace)
+	e.info.GraceExpiresAt = &graceUntil
 	// Issue inline (same logic, memory path).
 	rawID, _ := randomHex(8)
 	secret, _ := randomHex(16)

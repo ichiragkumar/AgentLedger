@@ -92,3 +92,61 @@ Deps to install: `framer-motion next-themes @tanstack/react-query zustand lucide
 LANDING: □ <8-word headline □ 5s value prop □ typewriter+copy □ real-UI preview □ problem real/no-jargon □ 3-step visuals □ 6-card bento □ ungated 4-tab demo □ journey clickable/auto-cycle □ numbers animated+real □ pricing + toggle □ FAQ accordion □ one-button CTA □ working footer □ dark+light contrast □ 375px clean □ LH perf >90 / a11y >95 □ zero AI slop.
 DASHBOARD: □ OAuth □ 3-step <5min □ key-once □ live connection test □ overview 4-cards/3-charts/alerts □ ranges sync □ agents table □ scoped detail □ cache live-save □ routing hot-reload+reorder □ budgets tree/forecast □ keys CRUD □ topology mock □ SSE ≤5s □ breach toast ≤60s □ empty/skeleton/error states □ dark parity □ 768px sidebar.
 DEPLOY: □ Vercel preview per PR □ prod on main □ domain+SSL □ OG correct □ docs indexed □ Plausible pageviews.
+
+## Implementation Status
+Proof run 2026-09-20 (owner: ledger-finish-proof). Ship-plumbing files
+(all NEW): `apps/dashboard/app/not-found.tsx`, `apps/dashboard/app/error.tsx`,
+`apps/web/app/not-found.tsx`, `apps/web/app/error.tsx`,
+`apps/web/app/robots.ts`, `apps/web/app/sitemap.ts`,
+`apps/web/app/opengraph-image.tsx`. Verify: `npx tsc --noEmit` clean in both
+apps; `npm run build` green in both (web routes: `/robots.txt`,
+`/sitemap.xml`, `/opengraph-image`). Test rows purged (20 request_logs rows +
+1 micro-budget; DB back to 8 rows / 4 seed budgets / 0 audit rows).
+
+F4 results (live stack: proxy :8787, dashboard :3000, web :3001, PG docker):
+
+| Check | Target | Actual | Verdict |
+|---|---|---|---|
+| request→dashboard-visible (proxy 200 → SSE `request` event) | ≤5s | 2554ms (proxy rtt 14ms) | PASS |
+| demo `--once` (7 calls, all agents) | all ok | 7 ok, 0 failed | PASS |
+| budget-breach→toast | ≤60s | ∞ — see gaps B1+B2 | FAIL |
+| offline banner (proxy down → dashboard cue) | banner | none — dashboard serves stale 200s silently | FAIL |
+
+F5 results (Lighthouse 13.5.0; NOTE: both app servers run `next dev`, so
+perf scores are dev-mode lower bounds, not prod):
+
+| Page | Perf | A11y | Best-practices | SEO |
+|---|---|---|---|---|
+| :3001 landing `/` | 61 | 97 | 96 | 100 |
+| :3000 `/login` | 84 | 100 | 96 | 100 |
+
+Landing LCP 7.6s / CLS 0.119 / unused-JS 370KiB are dominated by dev
+artifacts (`next-devtools`, unminified dev chunks). Real issue: 1
+`color-contrast` failure cluster (`text-zinc-500` on light surfaces;
+see gap B4). Keyboard pass (inspection): interactive elements are native
+`<button>`/`<a>`; `role=status`/`role=alert` present on waitlist; no
+skip-link. Reduced-motion: zero handling anywhere (gap B5).
+
+Known gaps for follow-ups (file/line, no fixes):
+- B1: proxy never persists audit/budget-spend to PG (`audit_log` 0 rows,
+  `budgets.spent_usd` always 0) → `apps/dashboard/app/api/alerts/route.ts`
+  returns `[]`, SSE `alert` events never fire. Enforcer itself works
+  (live 429 `budget_exceeded team:f4-breach:monthly`, 135%).
+- B2: no toast infra — `useRealtime` alert events have no consumer UI;
+  `apps/dashboard/app/(app)/overview/page.tsx:45` refreshes silently.
+  Follow-up: add toast lib + `status` banner (covers offline too).
+- B3: `demo/runner.py:39-42` sends `AgentLedger-Key` only; live proxy
+  path required `Authorization: Bearer` for upstream success in this run
+  (mock 400s otherwise). Runner/upstream wiring needs one owner.
+- B4: `apps/web/components/landing/hero.tsx` (+ journey/numbers):
+  `text-zinc-500` contrast failures per Lighthouse `color-contrast`.
+- B5: no `prefers-reduced-motion` guard anywhere (framer-motion in
+  `apps/web/components/landing/product-journey.tsx:15,194`, CSS
+  `animate-[ticker…]` in `social-proof-bar.tsx:15`,
+  `animate-[fadeUp…]` in `hero.tsx`, typewriter) — spec-19 §Animation
+  requires it.
+- B6 (stack note): live proxy was bounced mid-run by persons unknown;
+  pre-bounce build ran `enforce-stub` (no metering persistence path at
+  all), post-bounce `enforce-precheck, cache-hook, route-balanced`.
+  Upstream stub returns fixed 10/20 tokens (`chatcmpl-liveproof`), so
+  cost math is not yet realistic.

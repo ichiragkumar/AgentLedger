@@ -16,7 +16,7 @@ export default function SpendTrend({ data }: { data: TrendPoint[] }) {
           <XAxis dataKey="day" tick={{ fontSize: 11 }} minTickGap={28} />
           <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`} />
           <Tooltip formatter={(v: unknown) => `$${Number(v ?? 0).toFixed(2)}`} labelFormatter={(d) => `Day ${d}`} />
-          <Area type="monotone" dataKey="spend" name="Spend (USD)" stroke="#22c55e" fill="#22c55e" fillOpacity={0.25} />
+          <Area type="monotone" dataKey="spend" name="Spend (USD)" stroke="hsl(var(--savings))" fill="hsl(var(--savings))" fillOpacity={0.25} />
         </AreaChart>
       </ResponsiveContainer>
     </div>

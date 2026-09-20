@@ -75,3 +75,16 @@ components/
 - Money/usage figures always `.mono`.
 - Charts: Recharts themed via CSS vars (no hardcoded series colors except tier semantics: cheap green → frontier red/purple).
 - `npx tsc --noEmit` clean per app; new UI = new file, never rewrite another agent's component.
+
+## Implementation Status (token-sweep, 2026-09-20)
+
+Report-listed dashboard files swept hex → tokens; `@agentledger/ui`
+`charts.ts` exists but is NOT a workspace dep of `apps/dashboard`, so
+series colors use `hsl(var(--chart-N))` directly (no new imports).
+`text-savings`/`text-overspend`/`text-warning`/`bg-primary`/
+`text-primary-foreground`/`border-primary` verified present in built CSS;
+`.mono` already defined in `apps/dashboard/app/globals.css`.
+Topology `<title>` kept as a single expression (hydration fix intact).
+Tier semantics preserved: cheap green → frontier red/purple.
+Verify: `npx tsc --noEmit` clean, `npm run build` green,
+`:3000/overview` → 307 auth redirect → `/login` 200.

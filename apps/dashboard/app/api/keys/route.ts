@@ -29,11 +29,15 @@ type GoKeyInfo = {
   created_at: string;
   last_used_at?: string | null;
   revoked: boolean;
+  grace_expires_at?: string | null;
+  rotated_from?: string | null;
 };
 
 type GoIssued = GoKeyInfo & { key: string };
 
 function toPublic(g: GoKeyInfo): PublicKey {
+  const grace = g.grace_expires_at ?? null;
+  const inGrace = g.revoked && grace !== null && new Date(grace).getTime() > Date.now();
   return {
     id: g.id,
     name: g.name,
@@ -43,9 +47,9 @@ function toPublic(g: GoKeyInfo): PublicKey {
     last4: g.last4,
     createdAt: g.created_at,
     lastUsedAt: g.last_used_at ?? null,
-    status: g.revoked ? "revoked" : "active",
-    rotatedFrom: null,
-    graceExpiresAt: null,
+    status: inGrace ? "grace" : g.revoked ? "revoked" : "active",
+    rotatedFrom: g.rotated_from ?? null,
+    graceExpiresAt: grace,
   };
 }
 

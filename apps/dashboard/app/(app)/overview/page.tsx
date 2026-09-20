@@ -71,6 +71,20 @@ export default function OverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events.length]);
 
+  // Toast on fresh alert events (budget breach → visible within seconds).
+  const [toast, setToast] = useState<string | null>(null);
+  const seenAlerts = useRef(0);
+  useEffect(() => {
+    const fresh = events.filter((e) => e.type === "alert");
+    if (fresh.length > seenAlerts.current) {
+      seenAlerts.current = fresh.length;
+      const latest = fresh[0];
+      setToast(`${latest.action} — ${latest.budgetId || "budget"} · ${latest.detail || ""}`.slice(0, 160));
+      const t = setTimeout(() => setToast(null), 8000);
+      return () => clearTimeout(t);
+    }
+  }, [events]);
+
   if (loading && !summary) return <OverviewSkeleton />;
 
   if (error && !summary) {
@@ -97,6 +111,11 @@ export default function OverviewPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      {toast && (
+        <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          {toast}
+        </div>
+      )}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
@@ -131,7 +150,7 @@ export default function OverviewPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard label={`Total Spend · ${range}`} value={fmtUSD(spend)} sub={`${s.requests24h} requests (24h)`} />
+            <StatCard label={`Total Spend · ${range}`} value={fmtUSD(spend)} sub={`over the last ${range}`} />
             <StatCard label="Requests · 24h" value={`${s.requests24h.toLocaleString("en-US")}`} sub="via proxy" invert={false} />
             <StatCard label="Active Models" value={`${s.byModel.length}`} sub="in selected window" invert={false} />
             <StatCard label="Active Agents" value={`${s.byAgent.length}`} sub="attributed via headers" invert={false} />

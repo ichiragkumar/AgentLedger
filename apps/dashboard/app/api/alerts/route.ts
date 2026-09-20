@@ -61,7 +61,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 20) || 20, 1), 100);
 
-  const [audit, utils] = await Promise.all([
+  const [audit, utils, live] = await Promise.all([
     queryOrNull<AuditRow>(
       `SELECT seq, ts, actor, action, budget_id, detail
        FROM audit_log ORDER BY seq DESC LIMIT $1`,
@@ -69,6 +69,12 @@ export async function GET(req: Request) {
     ),
     queryOrNull<BudgetUtilRow>(
       `SELECT id, level, scope_key, dollar_limit, spent_usd FROM budgets WHERE dollar_limit > 0`
+    ),
+    // Live enforcer audit (in-memory): breach/downgrade/stop entries land
+    // here first — PG audit_log only fills when the proxy persists it.
+    proxyFetch<{ entries: { seq: number; ts: string; actor: string; action: string; budget_id?: string; detail?: string }[] }>(
+      "/v1/audit",
+      { headers: mgmtHeaders() }
     ),
   ]);
 
@@ -82,6 +88,26 @@ export async function GET(req: Request) {
     budgetId: a.budget_id,
     source: "audit_log",
   }));
+
+  // Live enforcer entries (dedupe by action+budget+detail against PG rows).
+  if (live.ok) {
+    const seen = new Set(alerts.map((a) => `${a.kind}|${a.budgetId}|${a.detail}`));
+    for (const e of live.data.entries ?? []) {
+      const key = `${e.action}|${e.budget_id ?? ""}|${e.detail ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      alerts.push({
+        id: `proxy-${e.seq}`,
+        ts: e.ts,
+        severity: SEVERITY[e.action] ?? "info",
+        kind: e.action,
+        title: TITLE[e.action] ?? e.action,
+        detail: e.detail ?? "",
+        budgetId: e.budget_id ?? "",
+        source: "audit_log",
+      });
+    }
+  }
 
   // Derived warnings: budgets ≥75% utilized without needing an audit row.
   for (const b of utils ?? []) {

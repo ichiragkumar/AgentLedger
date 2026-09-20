@@ -112,7 +112,9 @@ export default function OnboardingFlow() {
     setHint(null);
     const tick = async () => {
       try {
-        const res = await testConnection();
+        // Scope the poll to the just-issued key so other workspaces' traffic
+        // can't trip the green tick (prefix is safe to send — never secret).
+        const res = await testConnection(fullKey ? { keyPrefix: fullKey.slice(0, 7) } : {});
         setRequestsSeen(res.requestsSeen);
         if (res.connected) {
           setConnected(true);

@@ -40,7 +40,10 @@ const SECTIONS: NavSection[] = [
   },
   {
     title: "ADVANCED",
-    items: [{ href: "/topology", label: "Topology", badge: "Phase 5" }],
+    items: [
+      { href: "/topology", label: "Topology", badge: "Phase 5" },
+      { href: "/demo", label: "Demo" },
+    ],
   },
 ];
 

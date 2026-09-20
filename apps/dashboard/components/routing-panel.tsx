@@ -44,12 +44,12 @@ export interface RoutingPanelProps {
 }
 
 const MODEL_COLORS = [
-  "#22c55e", // cheap tiers — green
-  "#38bdf8",
-  "#a78bfa",
-  "#f59e0b",
-  "#ef4444", // frontier — red (expensive)
-  "#94a3b8",
+  "hsl(var(--savings))", // cheap tiers — green
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-5))",
+  "hsl(var(--warning))",
+  "hsl(var(--overspend))", // frontier — red (expensive)
+  "hsl(var(--muted-foreground))",
 ];
 
 const MODEL_SHORT: Record<string, string> = {
@@ -83,9 +83,9 @@ function pieBackground(slices: DistributionSlice[]): string {
 }
 
 function barColor(score: number): string {
-  if (score >= 0.85) return "#22c55e";
-  if (score >= 0.6) return "#f59e0b";
-  return "#ef4444";
+  if (score >= 0.85) return "hsl(var(--savings))";
+  if (score >= 0.6) return "hsl(var(--warning))";
+  return "hsl(var(--overspend))";
 }
 
 export default function RoutingPanel(props: RoutingPanelProps) {
@@ -109,7 +109,7 @@ export default function RoutingPanel(props: RoutingPanelProps) {
         <span>{windowLabel}</span>
       </header>
 
-      <p data-testid="savings-line">
+      <p data-testid="savings-line" className="mono">
         You would have spent {fmtUSD(wouldHaveSpent)}. You spent{" "}
         {fmtUSD(spent)}. Saved {fmtUSD(saved)} ({savedPct.toFixed(1)}%).
       </p>

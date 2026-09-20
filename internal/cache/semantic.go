@@ -141,6 +141,15 @@ func (s *SemanticCache) SetThreshold(t float64) {
 	s.mu.Unlock()
 }
 
+// Clear drops every vector. Flush-all path for the management plane.
+func (s *SemanticCache) Clear() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := len(s.items)
+	s.items = map[string]semanticItem{}
+	return n
+}
+
 // Threshold returns the current admit threshold.
 func (s *SemanticCache) Threshold() float64 {
 	s.mu.RLock()

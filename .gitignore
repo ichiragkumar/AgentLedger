@@ -3,6 +3,7 @@ coverage.out
 .env
 .env*.local
 .DS_Store
+demo/.keys.json
 node_modules/
 apps/*/node_modules/
 apps/*/.next/
