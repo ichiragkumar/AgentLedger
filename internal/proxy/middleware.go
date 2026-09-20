@@ -2,11 +2,16 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/agentledger/agentledger/internal/auth"
+	"github.com/agentledger/agentledger/internal/cache"
 	"github.com/agentledger/agentledger/internal/enforce"
 	"github.com/agentledger/agentledger/internal/router"
 	"github.com/agentledger/agentledger/pkg/models"
@@ -65,7 +70,107 @@ func RouteStub(next http.Handler) http.Handler {
 	})
 }
 
-// --- Live chain middlewares (finish track: stub bodies → real wiring) ---
+// --- Auth + HIT logging (security fix 2026-09-20) ---
+//
+// Cache HITs serve inside the cache layer without reaching the upstream
+// handler — which is also where virtual-key auth lived. Two consequences:
+// unauthenticated callers could replay cached completions, and HIT usage
+// never reached the audit trail. Both middlewares below close that:
+//
+//	AuthMiddleware resolves the virtual key FIRST (outermost). HIT or MISS,
+//	unknown keys get 401 before any cached bytes move.
+//	HitLogMiddleware sits outside the cache layer and logs served HITs
+//	(real tokens, $0 cost — the spend was booked on the MISS that stored
+//	them). HITs still never burn budget (Observe stays innermost).
+
+// ctxKeyResolution carries the auth resolution past middleware that would
+// otherwise re-resolve. Context, not a header: request headers are
+// caller-controlled and must never be trusted for identity.
+type ctxKeyResolution struct{}
+
+// AuthMiddleware rejects unknown virtual keys before any other layer runs.
+func (p *Proxy) AuthMiddleware() Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			resolution, err := p.resolveKey(r)
+			if err != nil {
+				if err == auth.ErrMissingKey {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing virtual key: send AgentLedger-Key: vk_xxx"})
+				} else {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid virtual key"})
+				}
+				return
+			}
+			ctx := context.WithValue(r.Context(), ctxKeyResolution{}, resolution)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// HitLogMiddleware logs served cache HITs to the audit trail. MISS traffic
+// passes through untouched (the upstream handler logs it). Cost is always $0
+// — the dollars were booked when the entry was stored.
+func (p *Proxy) HitLogMiddleware() Middleware {
+	return func(next http.Handler) http.Handler {
+		if p.log == nil {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ow := &observeWriter{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(ow, r)
+			if ow.Header().Get(cache.CacheHeader) != cache.ValueHit {
+				return
+			}
+			p.logHit(r, ow)
+		})
+	}
+}
+
+func (p *Proxy) logHit(r *http.Request, ow *observeWriter) {
+	defer func() { _ = recover() }()
+	raw, _ := readRestoreBody(r, int64(maxRequestBodyBytes)+1)
+	model, _, _ := parseRouteInput(raw, r.Header)
+	if strings.TrimSpace(model) == "" {
+		return
+	}
+	in, out := parseHitTokens(ow.Header().Get(cache.CacheTokensHeader))
+	if in+out <= 0 {
+		if u := ow.usage(); u.PromptTokens+u.CompletionTokens > 0 {
+			in, out = u.PromptTokens, u.CompletionTokens
+		} else {
+			return
+		}
+	}
+	attr := attributionFromRequest(r)
+	var prefix string
+	if res, ok := r.Context().Value(ctxKeyResolution{}).(auth.Resolution); ok {
+		prefix = res.KeyPrefix
+	}
+	// HITs are served from memory: no measurable latency, no upstream call.
+	_ = p.log.Log(r.Context(), models.RequestLog{
+		Timestamp: time.Now().UTC(), Model: model, Provider: string(ResolveProvider(model)),
+		TokensIn: in, TokensOut: out,
+		CostUSD: 0, LatencyMs: 0, UpstreamLatencyMs: 0,
+		AgentID: attr.AgentID, TeamID: attr.TeamID, ProjectID: attr.ProjectID,
+		ChainID: attr.ChainID, ParentAgentID: attr.ParentAgentID,
+		VirtualKeyPrefix: prefix, StatusCode: ow.status, Stream: false, PriceKnown: true,
+	})
+}
+
+// parseHitTokens parses the "in/out" form written by serveEntry.
+func parseHitTokens(s string) (int, int) {
+	parts := strings.Split(strings.TrimSpace(s), "/")
+	if len(parts) != 2 {
+		return 0, 0
+	}
+	in, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	out, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err1 != nil || err2 != nil || in < 0 || out < 0 {
+		return 0, 0
+	}
+	return in, out
+}
+
 //
 // The stubs above stay for env-gated fail-open (any subsystem off or
 // erroring → stub behavior, never a 500 on the data plane). The live

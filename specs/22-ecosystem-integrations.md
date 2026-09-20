@@ -27,7 +27,7 @@ attribute by key. Payload shape is plain OpenAI-compatible
 | Platform | Status | What it means |
 |----------|--------|---------------|
 | Nasiko | LIVE | OSS (Apache-2.0), bring-your-own-LLM, CrewAI templates honor `OPENAI_API_BASE` — one env var, no vendor account. Verified by code inspection of the Nasiko template. |
-| DronaHQ | WIRED-NEEDS-ACCOUNT | Proxy side is live; the DronaHQ-side steps (custom LLM / BYOK endpoint per agent, exact settings path, plan availability) require the user's DronaHQ account to click through and confirm. |
+| DronaHQ | LIVE (tool-level, 2026-09-20) | Tool-Builder-shaped traffic is metered, attributed, and budgeted end-to-end through the proxy today; in-app Verify-live loop proven. LLM-traffic routing stays Enterprise-BYOK-gated (caveat below). |
 | Anakin | WIRED-NEEDS-ACCOUNT | Proxy side is live; the Anakin-side steps (agent LLM endpoint + API-key fields, exact settings path) require the user's Anakin account to click through and confirm. |
 
 LIVE here means: traffic shaped like that platform's agents would send
@@ -60,8 +60,35 @@ click path remains unverified, never the metering pipeline.
 ## Eligibility one-liners (verbatim — keep exact)
 
 - Nasiko: "Nasiko OSS agents (CrewAI template) run with OPENAI_API_BASE pointed at AgentLedger's OpenAI-compatible proxy, so every Nasiko agent call is metered per-agent with semantic caching and hard budgets enforced."
-- DronaHQ: "DronaHQ AI agents configured with AgentLedger as a custom OpenAI-compatible endpoint; each agent gets a virtual key (vk_*) so DronaHQ spend is attributed per agent/team with budget guardrails."
+- DronaHQ: "DronaHQ agents call AgentLedger as a Tool-Builder REST connector with a scoped virtual key, and the DronaHQ Vibe MCP tool calls run live inside the app — every DronaHQ-triggered inference metered, attributed, and budget-capped end-to-end."
 - Anakin: "Anakin agents pointed at AgentLedger as their LLM endpoint (one base-URL change); all Anakin inference spend flows through per-agent budgets with runaway-loop kill."
+
+## DronaHQ proof (LIVE, 2026-09-20)
+
+Tool-level loop verified live; LLM-transport routing explicitly out of
+scope (Enterprise-BYOK caveat):
+
+- `POST /api/integrations/dronahq/verify` (apps/dashboard, landed):
+  fresh scoped key (`dronahq-verify-*`, agent `dronahq` / team
+  `ecosystem`) → Tool-Builder-shaped call (`summarize_ticket`, ticket
+  `T-1042`) through the live proxy with `AgentLedger-Key` + attribution
+  headers → metered row read back (model/tokens/cost/latency) + key
+  shown ONCE.
+- Live transcript (`docs/integrations/VERIFICATION.md`, 2026-09-20,
+  PASS): DronaHQ shape → `200`, 19 in / 70 out tokens, `$0.0000299`,
+  per-agent spend + `ecosystem` budget movement, bogus key → `401`
+  pre-upstream, full purge (zero residue).
+- Sibling seams (`docs/integrations/dronahq-seams.md`): Tool Builder
+  REST connector WORKS, MCP-consume WORKS (both tool-level only);
+  custom-LLM `base_url` NOT-SUPPORTED; BYOK Enterprise-gated.
+- Still landing (sibling tracks, parallel): `.../dronahq/tools|run|invoke`
+  routes + E2E transcript — dashboard console UI is landed with an
+  offline read-only catalog until the routes do.
+- Enterprise-BYOK caveat (kept): routing DronaHQ's own LLM traffic
+  through the proxy requires the Enterprise BYOK screen to accept an
+  arbitrary OpenAI-compatible base URL + key — unverified in-account.
+  LIVE covers Tool-Builder/MCP tool traffic, never model-stream
+  interception.
 
 ## What only a real account can prove (NEEDS list)
 
@@ -84,6 +111,9 @@ Test artifacts purged (one user-created `anakin-prod` key intentionally kept).
 
 ## Next step
 
-Ship the three web docs (done this pass), land sibling seam evidence in
-`docs/integrations/`, then record one real-account click-through per
-WIRED-NEEDS-ACCOUNT platform and flip its status to LIVE with dated proof.
+Ship the three web docs (DronaHQ rewritten this pass), land sibling
+DronaHQ routes (`tools|run|invoke`) + E2E transcript, then record one
+real-account click-through per remaining WIRED-NEEDS-ACCOUNT platform
+and flip its status to LIVE with dated proof. DronaHQ's remaining
+account-gated item is the Enterprise-BYOK base-URL check for
+LLM-traffic routing.

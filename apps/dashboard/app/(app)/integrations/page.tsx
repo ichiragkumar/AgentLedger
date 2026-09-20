@@ -11,6 +11,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import DronaHqConsole from "@/components/integrations/dronahq-console";
+
 export const dynamic = "force-dynamic";
 
 type Integration = {
@@ -285,6 +287,7 @@ export default function IntegrationsPage() {
                     Setup docs
                   </a>
                 </div>
+                {it.id === "dronahq" && <DronaHqConsole />}
                 {it.live && (it.live.keys > 0 || it.live.calls > 0) && (
                   <p className="text-xs text-zinc-500" role="status">
                     {it.live.keys} key{it.live.keys === 1 ? "" : "s"} · {it.live.calls} metered call{it.live.calls === 1 ? "" : "s"} ·{" "}

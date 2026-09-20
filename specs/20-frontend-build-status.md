@@ -148,6 +148,14 @@ until then.
 - Console-error fixes: `next/Script beforeInteractive`; single-expression SVG `<title>`; `suppressHydrationWarning` both apps (Grammarly attrs).
 - GitHub slug: `ichiragkumar/AgentLedger`. OAuth confirmed working locally.
 - SVG decision: no reactflow (TopologyPanel <1s at 20 nodes, zero deps).
+- **Security fix (2026-09-20, coordinator): cache HITs skipped BOTH auth and
+  logging** (proven live: keyless replay got a cached 200). Fixed:
+  `AuthMiddleware` (outermost, context-bound resolution — headers are
+  caller-controlled and never trusted for identity), `HitLogMiddleware`
+  (logs HITs: real tokens, $0 — spend booked on the MISS; HITs still never
+  burn budget), `serveEntry` emits token counts, handler reuses context
+  resolution. Regression tests green. Live proof: no-key replay → 401;
+  MISS row (112 tok, $0.0000409) + HIT row (112 tok, $0) in PG.
 - `pg` explicit in `apps/web`; `apps/web/.env.local` holds DATABASE_URL (gitignored).
 
 ## Two-App Journey (how :3001 + :3000 fit)

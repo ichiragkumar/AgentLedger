@@ -79,7 +79,13 @@ func NewMuxWithChain(p *Proxy, deps ChainDeps) *http.ServeMux {
 		// cache MISS traffic that reaches upstream.
 		chained = ObserveMiddleware(deps.Enforcer, p.pricing)(chained)
 	}
-	chained = Chain(chained, enforceMW, cacheMW, routeMW)
+	// Auth runs outermost: unknown keys get 401 before any cached bytes move
+	// (HITs never reach the upstream handler where auth used to live).
+	// HitLog sits outside the cache layer so served HITs still reach the
+	// audit trail (real tokens, $0 — spend was booked on the MISS).
+	authMW := p.AuthMiddleware()
+	hitlogMW := p.HitLogMiddleware()
+	chained = Chain(chained, authMW, enforceMW, hitlogMW, cacheMW, routeMW)
 	mux.Handle("POST /v1/chat/completions", chained)
 
 	mux.HandleFunc("GET /health", handleHealth(p.version))

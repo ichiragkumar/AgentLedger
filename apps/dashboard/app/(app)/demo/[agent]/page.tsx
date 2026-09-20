@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useDemoAgent, useDemoRun } from "@/lib/hooks/use-demo";
+import Transcript from "@/components/demo/transcript";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,12 @@ function fmtSpend(v: number): string {
   if (v >= 1) return `$${v.toFixed(2)}`;
   if (v > 0) return `$${v.toFixed(6)}`;
   return "$0.00";
+}
+
+function fmtElapsed(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
@@ -51,7 +58,7 @@ export default function DemoAgentPage() {
   const id = decodeURIComponent(params.agent ?? "");
   const [view, setView] = useState<View>("after");
   const { agent, loading, error, refresh } = useDemoAgent(id || null);
-  const { running, lastDirect, runError, run, runWithout, resetOne } = useDemoRun(refresh);
+  const { running, elapsedSecs, lastDirect, transcript, runError, run, runWithout, resetOne } = useDemoRun(refresh);
 
   if (loading) return <DetailSkeleton />;
 
@@ -91,6 +98,14 @@ export default function DemoAgentPage() {
               {agent.blurb} Team {agent.team} · member rows:{" "}
               <span className="mono">{agent.memberAgentIds.join(", ")}</span>
             </p>
+            <p aria-label="Agent explainer" className="mt-2 max-w-2xl text-xs text-zinc-500">
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">What: </span>
+              {agent.blurb}{" "}
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">How: </span>
+              {agent.routingNote}{" "}
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">Solving: </span>
+              {agent.problem}
+            </p>
             <p className="mt-2 max-w-2xl rounded-md border-l-2 border-indigo-600 bg-indigo-50 px-2.5 py-1.5 text-xs text-zinc-700 dark:border-indigo-400 dark:bg-indigo-950 dark:text-zinc-300">
               <span className="font-semibold">Problem it solves: </span>
               {agent.problem}
@@ -122,7 +137,7 @@ export default function DemoAgentPage() {
               title="Through the proxy: metered, attributed, budgeted"
               className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              {running ? "Running…" : "Run with AgentLedger"}
+              {running ? `Running… ${fmtElapsed(elapsedSecs)}` : "Run with AgentLedger"}
             </button>
             <button
               type="button"
@@ -132,7 +147,7 @@ export default function DemoAgentPage() {
               title="Direct to provider: billed blind, nothing logged"
               className="rounded-md border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-              {running ? "Running…" : "Run without"}
+              {running ? `Running… ${fmtElapsed(elapsedSecs)}` : "Run without"}
             </button>
             <button
               type="button"
@@ -158,6 +173,17 @@ export default function DemoAgentPage() {
         )}
       </div>
 
+      <section aria-label="Live transcript" className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+        <h2 className="text-lg font-semibold tracking-tight">Live transcript</h2>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          Latest run — what the agent was asked and what it returned
+          {running ? ` (running… ${fmtElapsed(elapsedSecs)} elapsed)` : ""}.
+        </p>
+        <div className="mt-3">
+          <Transcript entries={transcript} />
+        </div>
+      </section>
+
       {!agent.hasTraffic ? (
         <div className="rounded-xl border border-dashed border-zinc-300 p-6 dark:border-zinc-700">
           <p className="text-sm font-medium">No traffic for {agent.label} yet.</p>
@@ -168,7 +194,7 @@ export default function DemoAgentPage() {
               onClick={() => void run({ cycles: 1, agent: id })}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              {running ? "Running…" : "Run with AgentLedger"}
+              {running ? `Running… ${fmtElapsed(elapsedSecs)}` : "Run with AgentLedger"}
             </button>
             <button
               type="button"
@@ -176,7 +202,7 @@ export default function DemoAgentPage() {
               onClick={() => void runWithout({ cycles: 1, agent: id })}
               className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
             >
-              {running ? "Running…" : "Run without"}
+              {running ? `Running… ${fmtElapsed(elapsedSecs)}` : "Run without"}
             </button>
           </div>
           <p className="mt-3 text-xs text-zinc-500">

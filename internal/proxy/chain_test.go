@@ -383,3 +383,66 @@ func TestChainInvalidJSONFailOpen(t *testing.T) {
 		t.Fatal("route header must be present even on fail-open passthrough")
 	}
 }
+
+func TestChainHitRequiresAuth(t *testing.T) {
+	// Regression: cache HITs served without reaching the upstream handler,
+	// where virtual-key auth used to live. Unknown callers must 401 even
+	// when the exact bytes sit in cache.
+	fx := wireChainTest(t, 10, 20, nil)
+	h := chainHeaders("auth-agent", "auth-team")
+	body := `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"auth probe tungsten hedgehog"}]}`
+	seeded := fx.do(t, body, h)
+	if seeded.Code != http.StatusOK {
+		t.Fatalf("seed: status %d", seeded.Code)
+	}
+	// Same bytes, no key (and a bogus key): both must 401, never replay.
+	noKey := chainHeaders("auth-agent", "auth-team")
+	delete(noKey, "AgentLedger-Key")
+	for name, hdr := range map[string]map[string]string{"no-key": noKey} {
+		rec := fx.do(t, body, hdr)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s HIT replay: status %d, want 401", name, rec.Code)
+		}
+	}
+	bogus := chainHeaders("auth-agent", "auth-team")
+	bogus["AgentLedger-Key"] = "vk_nope"
+	if rec := fx.do(t, body, bogus); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("bogus-key HIT replay: status %d, want 401", rec.Code)
+	}
+	// The real key still replays (sanity: auth passes, HIT serves).
+	if rec := fx.do(t, body, h); rec.Code != http.StatusOK {
+		t.Fatalf("authed replay: status %d, want 200", rec.Code)
+	}
+}
+
+func TestChainHitLogsAuditRow(t *testing.T) {
+	// Cache HITs never burn budget (Observe stays innermost) but MUST reach
+	// the audit trail: real tokens, $0 cost (spend booked on the MISS).
+	fx := wireChainTest(t, 10, 20, nil)
+	h := chainHeaders("hitlog-agent", "hitlog-team")
+	body := `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hitlog probe copper octopus"}]}`
+	if rec := fx.do(t, body, h); rec.Code != http.StatusOK {
+		t.Fatalf("seed: status %d", rec.Code)
+	}
+	before := len(fx.mem.Entries)
+	hit := fx.do(t, body, h)
+	if hit.Code != http.StatusOK {
+		t.Fatalf("replay: status %d", hit.Code)
+	}
+	if got := hit.Header().Get("X-AgentLedger-Cache"); got != "HIT" {
+		t.Fatalf("expected HIT, got %q", got)
+	}
+	if len(fx.mem.Entries) != before+1 {
+		t.Fatalf("HIT must append exactly one audit row, entries %d→%d", before, len(fx.mem.Entries))
+	}
+	row := fx.mem.Entries[len(fx.mem.Entries)-1]
+	if row.TokensIn+row.TokensOut <= 0 {
+		t.Fatalf("HIT row must carry real tokens, got %+v", row)
+	}
+	if row.CostUSD != 0 {
+		t.Fatalf("HIT row cost must be 0 (booked on MISS), got %f", row.CostUSD)
+	}
+	if row.AgentID != "hitlog-agent" || row.Model != "gpt-4o-mini" {
+		t.Fatalf("HIT row attribution wrong: %+v", row)
+	}
+}

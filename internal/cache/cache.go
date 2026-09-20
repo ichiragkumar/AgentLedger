@@ -55,6 +55,9 @@ const (
 	SavedUSDHeader = "X-AgentLedger-Saved-Usd"
 	// SimilarityHeader reports the cosine similarity of a semantic hit.
 	SimilarityHeader = "X-AgentLedger-Cache-Similarity"
+	// CacheTokensHeader reports the served entry's "prompt/completion"
+	// token counts so the audit trail can log HITs without the entry.
+	CacheTokensHeader = "X-AgentLedger-Cache-Tokens"
 
 	// ValueHit / ValueMiss are the only CacheHeader values on the wire.
 	ValueHit  = "HIT"

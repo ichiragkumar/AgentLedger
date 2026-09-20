@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // --- in-file fetchers ---
 
@@ -148,7 +148,44 @@ export type DemoRunResult = {
   agents: string[];
   cycles: number;
   warning: string | null;
+  transcript?: DemoTranscriptEntry[] | null;
 };
+
+// --- live-transcript contract (POST /api/demo/run, both modes) ---
+// Backend sibling lands `transcript` in parallel — built to its exact shape:
+//   transcript: [{agent, model, prompt, completion, ms, ok, error?}]
+// (600-char truncated server-side). Token extras render when present but are
+// never required; absent transcript degrades to null, never a crash.
+
+export type DemoTranscriptEntry = {
+  agent: string;
+  model: string;
+  prompt: string;
+  completion: string;
+  ms: number;
+  ok: boolean;
+  error?: string;
+  tokensIn?: number;
+  tokensOut?: number;
+  tokens?: number;
+};
+
+/** Client fetch timeout for demo runs (free-tier reasoning models are slow). */
+export const DEMO_RUN_TIMEOUT_MS = 300_000;
+
+export const DEMO_RUN_TIMEOUT_MESSAGE =
+  "ran past 5:00 — free-tier reasoning models are slow; try per-agent run";
+
+function pickTranscript(r: unknown): DemoTranscriptEntry[] | null {
+  const t = (r as { transcript?: unknown } | null)?.transcript;
+  return Array.isArray(t) ? (t as DemoTranscriptEntry[]) : null;
+}
+
+function toRunError(e: unknown): string {
+  if (e instanceof DOMException && e.name === "TimeoutError") return DEMO_RUN_TIMEOUT_MESSAGE;
+  if (e instanceof Error && /timeout/i.test(e.message)) return DEMO_RUN_TIMEOUT_MESSAGE;
+  return e instanceof Error ? e.message : "unavailable";
+}
 
 async function postJSON<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -156,6 +193,9 @@ async function postJSON<T>(path: string, body?: unknown): Promise<T> {
     headers: { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
+    // Demo runs hit free-tier reasoning models — bound the wait instead of
+    // hanging on "Running…" forever (maps to DEMO_RUN_TIMEOUT_MESSAGE).
+    signal: AbortSignal.timeout(DEMO_RUN_TIMEOUT_MS),
   });
   let data: unknown = null;
   try {
@@ -193,6 +233,7 @@ export type DirectRunResult = {
   warning: string | null;
   visibility: string;
   perAgent: Record<string, { requests: number; tokensIn: number; tokensOut: number; modeledSpend: number }>;
+  transcript?: DemoTranscriptEntry[] | null;
 };
 
 export function runDirectTraffic(opts?: { cycles?: number; agent?: string }): Promise<DirectRunResult> {
@@ -256,10 +297,32 @@ export function useDemoRun(onDone?: () => void) {
   const [lastRun, setLastRun] = useState<DemoRunResult | null>(null);
   const [lastDirect, setLastDirect] = useState<DirectRunResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  // Latest run's live transcript (set from run responses, cleared on reset).
+  const [transcript, setTranscript] = useState<DemoTranscriptEntry[] | null>(null);
+  // Elapsed-seconds ticker while `running` — the run buttons show this
+  // instead of an infinite bare "Running…".
+  const [elapsedSecs, setElapsedSecs] = useState(0);
+  const startRef = useRef<number | null>(null);
 
   useEffect(() => {
     getDemoRunStatus().then(setStatus).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!running) {
+      startRef.current = null;
+      setElapsedSecs(0);
+      return;
+    }
+    startRef.current = Date.now();
+    setElapsedSecs(0);
+    const t = setInterval(() => {
+      if (startRef.current !== null) {
+        setElapsedSecs(Math.floor((Date.now() - startRef.current) / 1000));
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [running]);
 
   const run = useCallback(
     async (opts?: { cycles?: number; agent?: string }) => {
@@ -269,9 +332,10 @@ export function useDemoRun(onDone?: () => void) {
         const r = await runDemoTraffic(opts);
         setLastRun(r);
         setLastDirect(null);
+        setTranscript(pickTranscript(r));
         onDone?.();
       } catch (e) {
-        setRunError(e instanceof Error ? e.message : "unavailable");
+        setRunError(toRunError(e));
       } finally {
         setRunning(false);
       }
@@ -287,8 +351,9 @@ export function useDemoRun(onDone?: () => void) {
         const r = await runDirectTraffic(opts);
         setLastDirect(r);
         setLastRun(null);
+        setTranscript(pickTranscript(r));
       } catch (e) {
-        setRunError(e instanceof Error ? e.message : "unavailable");
+        setRunError(toRunError(e));
       } finally {
         setRunning(false);
       }
@@ -301,6 +366,8 @@ export function useDemoRun(onDone?: () => void) {
     try {
       const r = await resetDemo();
       setLastRun(null);
+      setLastDirect(null);
+      setTranscript(null);
       onDone?.();
       return r;
     } finally {
@@ -312,6 +379,7 @@ export function useDemoRun(onDone?: () => void) {
     setRunning(true);
     try {
       const r = await resetDemoAgent(id);
+      setTranscript(null);
       onDone?.();
       return r;
     } finally {
@@ -319,7 +387,7 @@ export function useDemoRun(onDone?: () => void) {
     }
   }, [onDone]);
 
-  return { running, status, lastRun, lastDirect, runError, run, runWithout, reset, resetOne };
+  return { running, elapsedSecs, status, lastRun, lastDirect, transcript, runError, run, runWithout, reset, resetOne };
 }
 
 /** Single demo-agent detail (requests, model split, budgets). */

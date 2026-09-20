@@ -184,6 +184,10 @@ func serveEntry(w http.ResponseWriter, e Entry, layer, key string, sim float64) 
 	if e.CostUSD > 0 {
 		hdr.Set(SavedUSDHeader, strconv.FormatFloat(e.CostUSD, 'f', 8, 64))
 	}
+	// Token counts the HIT served (the audit trail reads these: cache HITs
+	// skip the upstream handler, so without this header their usage would
+	// be invisible to cost attribution).
+	hdr.Set(CacheTokensHeader, strconv.Itoa(e.PromptTokens)+"/"+strconv.Itoa(e.CompletionTokens))
 	ct := e.ContentType
 	if ct == "" {
 		ct = "application/json"

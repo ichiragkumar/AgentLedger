@@ -104,6 +104,25 @@ func New(cfg Config) *Proxy {
 	}
 }
 
+// resolveKey authenticates a virtual key: MapResolver first, then the
+// management-plane vault. Used by AuthMiddleware (chain) and
+// ServeChatCompletions (standalone). Never logs key material.
+func (p *Proxy) resolveKey(r *http.Request) (auth.Resolution, error) {
+	vk := auth.VirtualKeyFromRequest(r)
+	if vk == "" || len(vk) > maxVirtualKeyLen {
+		return auth.Resolution{}, auth.ErrMissingKey
+	}
+	resolution, err := p.auth.Resolve(vk)
+	if err != nil && p.vault != nil {
+		// Management-plane-issued keys (POST /v1/keys) resolve here.
+		resolution, err = p.vault.Resolve(vk)
+	}
+	if err != nil {
+		return auth.Resolution{}, auth.ErrUnknownKey
+	}
+	return resolution, nil
+}
+
 // Metrics exposes the registry for /metrics.
 func (p *Proxy) Metrics() *Metrics { return p.metrics }
 
@@ -175,19 +194,23 @@ func (p *Proxy) ServeChatCompletions(w http.ResponseWriter, r *http.Request) {
 	upstreamURL := UpstreamChatCompletionsURL(provider)
 
 	// --- Virtual key auth (never log the full key or the upstream key) ---
-	vk := auth.VirtualKeyFromRequest(r)
-	if vk == "" || len(vk) > maxVirtualKeyLen {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing virtual key: send AgentLedger-Key: vk_xxx"})
-		return
-	}
-	resolution, err := p.auth.Resolve(vk)
-	if err != nil && p.vault != nil {
-		// Management-plane-issued keys (POST /v1/keys) resolve here.
-		resolution, err = p.vault.Resolve(vk)
-	}
-	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid virtual key"})
-		return
+	// AuthMiddleware normally resolves first and stashes the resolution in
+	// context; resolve here when reaching the handler directly (tests,
+	// unwired installs). Either way an unknown key never reaches upstream.
+	var resolution auth.Resolution
+	if res, ok := r.Context().Value(ctxKeyResolution{}).(auth.Resolution); ok {
+		resolution = res
+	} else {
+		var err error
+		resolution, err = p.resolveKey(r)
+		if err != nil {
+			if err == auth.ErrMissingKey {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing virtual key: send AgentLedger-Key: vk_xxx"})
+			} else {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid virtual key"})
+			}
+			return
+		}
 	}
 	attr := attributionFromRequest(r)
 	// Request ID: prefer the caller's chain/trace header so dashboards can
