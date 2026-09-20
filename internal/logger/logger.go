@@ -184,14 +184,8 @@ func (l *MemoryLogger) Log(_ context.Context, e models.RequestLog) error {
 // Close implements Logger.
 func (l *MemoryLogger) Close() error { return nil }
 
-// NewFromEnv returns a Postgres stub when DATABASE_URL is set, else stdout.
-// Always compiles and runs with no DB present.
-func NewFromEnv() Logger {
-	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
-		return NewPostgresStubLogger(dsn, nil)
-	}
-	return NewStdoutLogger(nil)
-}
+// NewFromEnv lives in postgres.go: real Postgres sink when DATABASE_URL is
+// set AND reachable, else the stdout-backed stub.
 
 // DiscardLogger drops every row. Benchmarks and `--no-log` debug only —
 // never the default, the audit trail must not be silently lost in prod.

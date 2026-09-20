@@ -37,6 +37,16 @@ npm run build                                 # production check
 ```
 Proxy must be up first (`NEXT_PUBLIC_API_URL`, default http://localhost:8787).
 
+## Data plane (shipped)
+- `lib/db.ts` — pg `Pool` + idempotent schema ensure (schema.sql + migrations 001-003). `queryOrNull` degrades to zero-state when PG is down.
+- `app/api/spend/route.ts` — 24h/7d/30d sums, by model/agent/team top-10, 14-day daily trend (all from `request_logs`).
+- `app/api/requests/route.ts` — top-10 costliest requests.
+- `lib/api.ts` — Server Components fetch same-origin `/api/*`; proxy `/health` stays absolute.
+- Home page per spec 04 v0.1: 4 stat cards, 14-day AreaChart, by model/agent/team tables (attribution tags visible), top-10 request log, then Cache/Routing/Budget/Topology phase panels.
+- Dark/light: class-based toggle (`@custom-variant dark`, localStorage + `prefers-color-scheme` init, no FOUC).
+- Hydration: `suppressHydrationWarning` on `<html>`/`<body>` — browser extensions (e.g. Grammarly's `data-gr-ext-installed`) mutate DOM pre-hydration; not an app bug.
+- Backend: real Postgres logger (`internal/logger/postgres.go`, pgx/v5 pool, 3s insert timeout, stdout fallback, `PostgresLoggerLiveInsert` integration test). Proven: mock-upstream traffic → rows → `/api/spend` shows spend by model/agent/team + trend.
+
 ## Acceptance
 - [ ] `npx tsc --noEmit` clean
 - [ ] `/` renders 200 with proxy health badge (healthy/unreachable states)
