@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -99,6 +100,8 @@ func LoadFromFile(path string) (*Registry, error) {
 
 // LoadFromBytes parses FileFormat JSON. Accepts both the wrapped
 // {"prices":{...}} shape and a bare {model: price} map.
+// Negative rates are rejected (a bad price file must fail loudly, never
+// silently drive costs negative).
 func LoadFromBytes(data []byte) (*Registry, error) {
 	var wrapped FileFormat
 	if err := json.Unmarshal(data, &wrapped); err != nil {
@@ -113,6 +116,9 @@ func LoadFromBytes(data []byte) (*Registry, error) {
 		}
 		prices = bare
 		wrapped.Currency = "USD"
+	}
+	if err := validatePrices(prices); err != nil {
+		return nil, err
 	}
 	r := NewWithPrices(prices)
 	if wrapped.Version != "" {
@@ -162,7 +168,15 @@ func (r *Registry) Get(model string) (ModelPrice, bool) {
 }
 
 // Cost computes USD cost from provider usage. Never estimates tokens.
+// Negative counters are clamped to zero so a malformed upstream payload
+// can never produce a negative cost row.
 func (r *Registry) Cost(model string, promptTokens, completionTokens int) (float64, bool) {
+	if promptTokens < 0 {
+		promptTokens = 0
+	}
+	if completionTokens < 0 {
+		completionTokens = 0
+	}
 	p, known := r.Get(model)
 	cost := float64(promptTokens)/1e6*p.InputPer1M + float64(completionTokens)/1e6*p.OutputPer1M
 	return cost, known
@@ -173,6 +187,49 @@ func (r *Registry) Version() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.version
+}
+
+// Currency returns the loaded registry currency (default "USD").
+func (r *Registry) Currency() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.currency == "" {
+		return "USD"
+	}
+	return r.currency
+}
+
+// Size returns the number of priced models.
+func (r *Registry) Size() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.prices)
+}
+
+// Models returns the sorted list of priced model keys. Reused by the Router
+// (Phase 3) for tier tables and by the dashboard for filter dropdowns.
+func (r *Registry) Models() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, 0, len(r.prices))
+	for k := range r.prices {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// validatePrices rejects negative rates before they enter the registry.
+func validatePrices(m map[string]ModelPrice) error {
+	for k, v := range m {
+		if v.InputPer1M < 0 || v.OutputPer1M < 0 {
+			return fmt.Errorf("pricing: negative rate for model %q", k)
+		}
+		if v.InputPer1M != v.InputPer1M || v.OutputPer1M != v.OutputPer1M {
+			return fmt.Errorf("pricing: non-numeric rate for model %q", k)
+		}
+	}
+	return nil
 }
 
 func normalize(s string) string {

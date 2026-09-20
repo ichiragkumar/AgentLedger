@@ -71,3 +71,11 @@ Intelligent model routing that picks the cheapest model that meets quality requi
 
 ## Through Line
 > Phase 3 → "I cut my bill in half without touching my agents"
+
+## Implementation Status
+- Backend NEW: internal/router/ (classifier rules-v1 + ML stub, tiers DefaultTierMap + cost/balanced/quality strategies + Savings math, HeuristicJudge + Guard with <10% escalation budget, YAML/JSON rules engine with hot-reload + <1ms eval, A/B z-test split, fallback chain <2s, batch queue + webhook dispatcher) + internal/pricing/feed.go (atomic-swap live feed, polling).
+- Fixes by integrator: composite-literal-if parens (2 test files), task_type proof/research/theorem/frontier + frontier-keyword floor at complex, catch-all fixture priority 99→1 (matches file convention; priority-first semantics kept).
+- Results: full package green, classifier 98.0% on 500 suite (490/500; 10 misses are the documented adversarial short-hard taskType="" prompts), hint test passes, mixed-workload savings test passes.
+- Frontend: dashboard/components/routing-panel.tsx (zero-dep conic pie, X/Y/Z savings, quality, escalation vs 10%).
+- Wiring: replace RouteStub — skip on cache HIT, InputFromRequest → Decide → rewrite model + X-AgentLedger-Route/Tier/Complexity headers.
+- Needed deps (listed, not installed): none for v1 (stdlib). 10k benchmark plan documented in spec.

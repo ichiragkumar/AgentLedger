@@ -80,3 +80,11 @@ OpenAI-compatible reverse proxy that logs every request with token counts, costs
 
 ## Metrics Target
 500 GitHub stars, 100+ Docker pulls, 50+ weekly active proxy users. See [13-metrics-risks-next-actions](./13-metrics-risks-next-actions.md).
+
+## Implementation Status
+- Proxy hardened: body/model/tag/key length bounds, panic-recovery JSON 500, X-Request-Id join/generate + echo, negative usage clamping, unbounded SSE buffer removed, 405s + nosniff headers, provider AllProviders/IsSupportedModel, metrics NaN clamping + sorted output, pricing negative-rate guard + Currency/Size/Models getters, logger Sanitize (UTC/truncate/vk_t*** redaction) + DiscardLogger, auth constant-time Resolve + 512-char bound, main.go normalizePort + Read/IdleTimeout (no WriteTimeout for SSE) + set/empty key logging.
+- Proxy coverage 87.1%, auth 92.3%. `go vet + test + build` green, smoke OK (2 req / 17 in / 29 out).
+- DB: db/migrations/001_mirror_hardening.sql (composite team/agent/model×ts indexes, chain index, nonneg CHECKs, v_spend_24h/7d/30d + by model/agent/team + top-10 views).
+- Dashboard shell: dashboard/package.json (next@15/react/recharts/next-auth), app/page.tsx (spend + 4 panels), lib/api.ts, .env.local.example.
+- Env: .env.example + .env created (all phases; secrets empty except vk_dev dummy).
+- Stubs intact for saver/router/enforcer/brain (CacheStub MISS, RouteStub model-prefix, EnforceStub pass-through). Remaining: real Postgres INSERT (pgx, needs go.mod dep), Next.js route handlers + layout.

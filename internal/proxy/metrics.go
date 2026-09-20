@@ -30,7 +30,22 @@ func NewMetrics() *Metrics {
 }
 
 // Observe records one completed proxied request.
+// Negative counters (callers should already sanitize) are clamped so a bad
+// upstream payload can never drive totals negative. Lock hold time is one
+// struct update — safe at 500+ concurrent requests.
 func (m *Metrics) Observe(model, provider string, status int, tokensIn, tokensOut int, costUSD, latencyMs float64) {
+	if tokensIn < 0 {
+		tokensIn = 0
+	}
+	if tokensOut < 0 {
+		tokensOut = 0
+	}
+	if costUSD < 0 || costUSD != costUSD { // also guard NaN
+		costUSD = 0
+	}
+	if latencyMs < 0 || latencyMs != latencyMs {
+		latencyMs = 0
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.requestsTotal++
@@ -103,8 +118,13 @@ func (m *Metrics) PrometheusText() string {
 	for _, k := range models {
 		out += fmt.Sprintf("agentledger_requests_by_model{model=%q} %d\n", k, m.byModel[k])
 	}
-	for code, n := range m.byStatus {
-		out += fmt.Sprintf("agentledger_requests_by_status{status=%q} %d\n", fmt.Sprint(code), n)
+	statuses := make([]int, 0, len(m.byStatus))
+	for code := range m.byStatus {
+		statuses = append(statuses, code)
+	}
+	sort.Ints(statuses)
+	for _, code := range statuses {
+		out += fmt.Sprintf("agentledger_requests_by_status{status=%q} %d\n", fmt.Sprint(code), m.byStatus[code])
 	}
 	provs := make([]string, 0, len(m.byProvider))
 	for k := range m.byProvider {
@@ -115,4 +135,16 @@ func (m *Metrics) PrometheusText() string {
 		out += fmt.Sprintf("agentledger_requests_by_provider{provider=%q} %d\n", k, m.byProvider[k])
 	}
 	return out
+}
+
+// Reset clears all counters. Tests and operator-triggered restarts only —
+// never called on the request hot path.
+func (m *Metrics) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.requestsTotal, m.tokensIn, m.tokensOut = 0, 0, 0
+	m.costUSD, m.latencySumMs = 0, 0
+	m.byModel = map[string]int64{}
+	m.byStatus = map[int]int64{}
+	m.byProvider = map[string]int64{}
 }

@@ -69,3 +69,53 @@ Semantic caching + exact-match caching that eliminates redundant LLM calls.
 
 ## Through Line
 > Phase 2 → "I stopped paying for duplicate calls"
+
+## Implementation Status
+
+> Built by ledger-saver (stdlib-only Go + props-only TSX). Mirror owns
+> proxy wiring; this package is NOT yet live in the chain — see WIRING.md.
+
+### Design (dual-layer pipeline: exact → semantic → provider)
+
+| Piece | File | Notes |
+|---|---|---|
+| `Cache` interface (`Check`/`Store`), `Key = SHA-256(model+messages+temperature)`, `Entry` (verbatim wire bytes), `Stats` (hit %, $ saved) | `internal/cache/cache.go` | 100% precision by construction: equal keys ⇒ byte-identical inputs |
+| In-memory TTL store (Redis-semantics stand-in) | `internal/cache/memory.go` | Lazy expiry on every `Check` → no stale after TTL; purge by agent/team/model |
+| `Embedder` iface + in-memory cosine index + Qdrant HTTP stubs (search/upsert payloads, `SearchRemote`) | `internal/cache/semantic.go` | Threshold clamped to [0.85, 0.99], default 0.92; `HashEmbedder` is DEV-ONLY (never benchmark with it) |
+| Per-model/per-agent TTL (`agent > model > default`), `FromEnv()`, `Validate()` | `internal/cache/config.go` | Bypass header `X-AgentLedger-No-Cache` honored fail-open |
+| `DeleteKey` + `Purge{,ByAgent,ByTeam,ByModel,All}` across BOTH layers | `internal/cache/invalidate.go` | Semantic vectors keyed by exact key — a delete can never resurrect |
+| Unique-context skip heuristic | `internal/cache/guard.go` | Skips on UUID/email/secret/6+-digit/account markers; first-person FAQ phrasing alone ("how do I reset my password") stays cacheable |
+| `Hook.Middleware` + `CacheHook(next)` (matches `proxy.Middleware` shape), write-through capture, verbatim SSE replay | `internal/cache/hook.go` | Miss path is transparent (status/headers/bytes untouched); store failures never fail requests |
+| Dashboard panel (hit %, $ saved, size, top queries — props only) | `dashboard/components/cache-panel.tsx` | No fetcher, no other dashboard files touched |
+| Mirror's 5-line patch (`CacheStub` → `hook.Middleware`) | `internal/cache/WIRING.md` | Chain order preserved; headers additive-only |
+
+Tests: `go vet ./internal/cache/... && go test ./internal/cache/...` green,
+package coverage **>80%** (7 `_test.go` files, one per module).
+
+### Hit-rate benchmark method (1000-query plan, acceptance: >30%)
+
+1. **Corpus**: 1000 diverse customer-support queries — 60% near-duplicates
+   (each base question rephrased 3–5 ways, e.g. "reset password" × 5 forms),
+   30% exact repeats (retry storms, multi-agent re-asks), 10% unique
+   (guard-bait: order ids, emails, account numbers → must MISS + never store).
+2. **Harness** (to build): replay corpus through the proxy with the pricing
+   adapter on, MiniLM sidecar + Qdrant live, threshold 0.92; record per-query
+   layer (exact/semantic/miss), similarity, lookup ms, provider ms.
+3. **Bar**: hit rate >30%, exact precision 100% (key equality audit),
+   semantic precision >90% (human-grade 200-sample of semantic hits),
+   exact lookup <1ms p99, semantic 5–20ms, hits 2–4x faster end-to-end
+   (5–20ms lookup vs 1–5s LLM call), savings within 10% of actual
+   (Σ avoided provider cost from Postgres log vs `Stats.SavedUSD`).
+4. **Cross-agent test** (CrewAI): researcher + support agents share one
+   team id and ask overlapping questions → assert cross-agent semantic hits
+   (`agent_id` differs, `team_id` equal, layer=semantic).
+
+### Deps needed (NOT added — `go.mod` untouched per scope)
+
+- `github.com/redis/go-redis/v9` — production exact store (`cache.Cache` impl).
+- Qdrant client — EITHER `github.com/qdrant/go-client` OR keep stdlib
+  `net/http` stubs in `semantic.go` (they already speak REST; decision: try
+  stdlib first, add client only if filtering/payload needs outgrow it).
+- Embedding runtime — `all-MiniLM-L6-v2` sidecar (384-dim) behind
+  `cache.Embedder`; e.g. Python `sentence-transformers` microservice or ONNX
+  `fastembed` container. `EMBED_MODEL` env selects it.

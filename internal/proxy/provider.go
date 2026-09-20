@@ -28,6 +28,24 @@ const (
 
 func (p Provider) String() string { return string(p) }
 
+// AllProviders lists every out-of-the-box upstream. Reused by the Router
+// (Phase 3) for tier tables and by /metrics label documentation.
+func AllProviders() []Provider {
+	return []Provider{ProviderOpenAI, ProviderAnthropic, ProviderGoogle, ProviderDeepSeek}
+}
+
+// IsSupportedModel reports whether model maps to a first-class provider
+// (vs the OpenAI-compatible default passthrough). Router reuse: unknown
+// models stay routable instead of erroring.
+func IsSupportedModel(model string) bool {
+	switch ResolveProvider(model) {
+	case ProviderOpenAI, ProviderAnthropic, ProviderGoogle, ProviderDeepSeek:
+		return true
+	default:
+		return false
+	}
+}
+
 // ResolveProvider maps a model name to a provider by prefix.
 //
 //   - gpt-, o1, o3, openai/          -> OpenAI

@@ -75,3 +75,10 @@ Budget management, policy enforcement, alerting, cost attribution hierarchy.
 
 ## Through Line
 > Phase 4 → "I set a budget and it actually enforced itself"
+
+## Implementation Status
+- Backend NEW: internal/enforce/ (budget hierarchy + Store, webhook/Slack/email dispatcher with per-window dedupe, string-tier downgrader, 429 hard-stop JSON, YAML policy engine <1ms with PII redact + fail-closed, chain tracker depth/tokens/window, linear+seasonal forecast + burndown, hash-chained audit, RBAC CRUD API, PreCheck middleware + Observe hook).
+- Fixes by integrator: NewDispatcher now stores senders (was dropping all alerts), hasMiniToken token-split (geMINI false-positive fixed; o3-mini still simple per test), marketing o1/O1 expectations corrected to deny (exact case-insensitive; dated/prefixed still allow), inverted fail-closed assertion, AddTokens creates depth-0 state for Observe-only flow with kill deferred to tracked chains.
+- Results: full package green (was 6 failures), 53-case policy suite passes.
+- DB: db/migrations/002_budgets.sql (budgets/policies/append-only audit_log). Frontend: dashboard/components/budget-panel.tsx (Recharts burndown + utilization + forecast).
+- Wiring: PreCheck replaces EnforceStub + Observe() post-response call. E2E scenario (90%→downgrade→100%→429→raise→resume) covered by tests.

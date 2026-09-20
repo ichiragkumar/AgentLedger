@@ -67,3 +67,48 @@ Unlike cloud compute, token optimization requires constant quality validation to
 
 ## Through Line
 > Phase 5 → "AgentLedger knows my workflow better than I do"
+
+## Implementation Status
+
+> Built by ledger-brain. Serving path is pure Go (`internal/brain`); ML
+> offline allowed as weight pushes via `SetWeights`. Router extended, never
+> forked (string model names, no import cycles). Enforcer budgets are hard
+> caps in `OptimizeWithBudget`. Input is Postgres logger rows + attribution
+> headers — no new headers, no proxy changes.
+
+Files: `internal/brain/graph.go` (discovery), `criticality.go` (scoring),
+`optimizer.go` (assignment), `learner.go` (EWMA loop), `roi.go`
+(cost↔value), `yield.go` (moat metric), `graph_test.go`,
+`optimizer_test.go`, `brain_test.go` (>80% on graph+optimizer, brute-force
+comparison), `db/migrations/003_brain.sql`
+(`workflow_graphs`, `step_stats`, `roi_signals`),
+`dashboard/components/topology-panel.tsx` (pure SVG, <1s at 20 nodes).
+
+Verification: `go vet ./internal/brain/...` clean; `go test
+./internal/brain/...` green (incl. 50-trial randomized optimizer fuzz vs
+brute force, 25.7% fixture savings vs uniform-frontier).
+
+### Why per-request routing is broken (algorithm doc stub)
+
+A per-call router minimizes each request's cost × quality in isolation. A
+7-agent pipeline is not 7 independent requests — it is one bet where an
+early failure discards every downstream dollar. Formally, Brain minimizes
+`E_total = Σ c_i + Σ p_i·(c_i + downstream(i))` while per-call routing
+minimizes each `c_i` alone, i.e. it prices `p_i·downstream(i)` at zero.
+Consequence: a cheap planner that passes the quality floor (q 0.85 ≥ 0.80)
+gets picked, fails 70% of the time, and re-burns $1.52 downstream — total
+$2.82 vs $2.07 for frontier-plan + cheap-leaf. Per-request routing is
+provably blind to exactly the term that dominates workflow spend. Fix:
+score criticality (position + downstream waste + failure rate), assign
+frontier only where failure is expensive, cheapest where it is not.
+
+### Case-study plan (real multi-agent pipeline, before/after)
+
+1. Instrument a 7-agent pipeline (planner → researcher → writer → reviewer
+   → formatter → QA → publisher) with `X-Request-Chain-Id` /
+   `X-Parent-Agent-Id`; run 1 week uniform-frontier (baseline $/workflow).
+2. Enable Brain optimization; run 1 week; measure $/workflow, yield rate,
+   waste-prediction error (<20%), learning delta (+5% target).
+3. Publish: cost before/after, per-step model map, yield-flat proof,
+   "cost $2.30 → $45 value" ROI anecdote. Blog: "Why per-request routing
+   is broken for agent swarms — and what to do about it."

@@ -9,6 +9,7 @@
 package auth
 
 import (
+	"crypto/subtle"
 	"errors"
 	"net/http"
 	"os"
@@ -60,10 +61,6 @@ func NewMapResolver(m map[string]string) *MapResolver {
 func NewMapResolverFromEnv() *MapResolver {
 	def := os.Getenv("OPENAI_API_KEY")
 	extra := parseExtraKeys(os.Getenv("VIRTUAL_KEYS"))
-	for k, v := range extra {
-		_ = k
-		_ = v
-	}
 	m := map[string]string{}
 	for _, vk := range []string{"vk_test", "vk_test_123", "vk_dev"} {
 		if vkEnv := os.Getenv("VIRTUAL_KEY_" + strings.ToUpper(strings.TrimPrefix(vk, "vk_"))); vkEnv != "" {
@@ -82,14 +79,27 @@ func NewMapResolverFromEnv() *MapResolver {
 	return NewMapResolver(m)
 }
 
-// Resolve authenticates a virtual key.
+// maxVirtualKeyLen bounds key material held in memory per request.
+// Longer inputs are rejected as unknown (never truncated-then-matched).
+const maxVirtualKeyLen = 512
+
+// Resolve authenticates a virtual key using a constant-time comparison so
+// the response timing does not reveal which keys exist. Oversized or blank
+// inputs are rejected without touching the table.
 func (r *MapResolver) Resolve(virtualKey string) (Resolution, error) {
 	vk := strings.TrimSpace(virtualKey)
 	if vk == "" {
 		return Resolution{}, ErrMissingKey
 	}
-	if res, ok := r.keys[vk]; ok {
-		return res, nil
+	if len(vk) > maxVirtualKeyLen {
+		return Resolution{}, ErrUnknownKey
+	}
+	for k, res := range r.keys {
+		// Constant-time on equal lengths; length mismatch short-circuits
+		// but reveals only the length class, not the key value.
+		if len(k) == len(vk) && subtle.ConstantTimeCompare([]byte(k), []byte(vk)) == 1 {
+			return res, nil
+		}
 	}
 	return Resolution{}, ErrUnknownKey
 }

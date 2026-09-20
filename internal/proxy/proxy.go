@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,6 +33,16 @@ const (
 var attributionHeaders = []string{
 	HeaderAgentID, HeaderTeamID, HeaderProjectID, HeaderChainID, HeaderParentAgentID,
 }
+
+// Hot-path bounds (DoS hardening). The proxy stays stdlib-only: no extra
+// allocations on the happy path beyond these cheap length checks.
+const (
+	maxRequestBodyBytes  = 10 << 20 // 10MB cap on incoming JSON
+	maxUpstreamBodyBytes = 20 << 20 // 20MB cap on upstream JSON
+	maxModelLen          = 256      // model names longer than this are rejected
+	maxTagLen            = 256      // attribution tags truncated to this (DB text bound)
+	maxVirtualKeyLen     = 512      // virtual keys longer than this are rejected
+)
 
 // Proxy forwards OpenAI-compatible chat completions upstream while counting
 // tokens, computing cost, and logging the audit row.
@@ -119,12 +131,18 @@ type sseUsageChunk struct {
 // ServeChatCompletions handles POST /v1/chat/completions.
 func (p *Proxy) ServeChatCompletions(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	// Panic guard: never drop the connection without a JSON error body.
+	defer func() {
+		if rec := recover(); rec != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal proxy error"})
+		}
+	}()
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed, use POST"})
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10MB cap
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodyBytes)) // 10MB cap
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot read body"})
 		return
@@ -135,8 +153,13 @@ func (p *Proxy) ServeChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	if strings.TrimSpace(min.Model) == "" {
+	min.Model = strings.TrimSpace(min.Model)
+	if min.Model == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "model is required"})
+		return
+	}
+	if len(min.Model) > maxModelLen {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "model name too long"})
 		return
 	}
 
@@ -145,7 +168,7 @@ func (p *Proxy) ServeChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	// --- Virtual key auth (never log the full key or the upstream key) ---
 	vk := auth.VirtualKeyFromRequest(r)
-	if vk == "" {
+	if vk == "" || len(vk) > maxVirtualKeyLen {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing virtual key: send AgentLedger-Key: vk_xxx"})
 		return
 	}
@@ -155,6 +178,9 @@ func (p *Proxy) ServeChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	attr := attributionFromRequest(r)
+	// Request ID: prefer the caller's chain/trace header so dashboards can
+	// join retries; generate a random one otherwise. Safe to log.
+	requestID := requestIDFromRequest(r)
 
 	// Resolve the real upstream key: per-provider env wins, else the
 	// virtual-key resolution default. NEVER log either value.
@@ -194,6 +220,9 @@ func (p *Proxy) ServeChatCompletions(w http.ResponseWriter, r *http.Request) {
 		ua += "/" + p.version
 	}
 	upReq.Header.Set("User-Agent", ua)
+	if requestID != "" {
+		upReq.Header.Set("X-Request-Id", requestID)
+	}
 
 	upstreamStart := time.Now()
 	upResp, err := p.client.Do(upReq)
@@ -216,12 +245,12 @@ func (p *Proxy) ServeChatCompletions(w http.ResponseWriter, r *http.Request) {
 		p.serveStream(w, r, upResp, streamParams{
 			model: min.Model, provider: provider, attr: attr,
 			keyPrefix: resolution.KeyPrefix, start: start,
-			upstreamLatency: upstreamLatency,
+			upstreamLatency: upstreamLatency, requestID: requestID,
 		})
 		return
 	}
 
-	respBody, err := io.ReadAll(io.LimitReader(upResp.Body, 20<<20))
+	respBody, err := io.ReadAll(io.LimitReader(upResp.Body, maxUpstreamBodyBytes))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "cannot read upstream response"})
 		return
@@ -234,6 +263,9 @@ func (p *Proxy) ServeChatCompletions(w http.ResponseWriter, r *http.Request) {
 		if v := upResp.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
 		}
+	}
+	if w.Header().Get("X-Request-Id") == "" && requestID != "" {
+		w.Header().Set("X-Request-Id", requestID)
 	}
 	if w.Header().Get("Content-Type") == "" {
 		w.Header().Set("Content-Type", "application/json")
@@ -287,11 +319,14 @@ type streamParams struct {
 	keyPrefix       string
 	start           time.Time
 	upstreamLatency time.Duration
+	requestID       string
 }
 
 // serveStream relays SSE chunks and counts tokens on completion.
 // p99 overhead target: <15ms added (measured as handler latency minus
 // upstream latency; the relay itself is a byte copy + bufio scan).
+// Memory bound: chunks are relayed line-by-line, never buffered whole,
+// so long streams cannot grow the proxy heap.
 func (p *Proxy) serveStream(w http.ResponseWriter, r *http.Request, upResp *http.Response, sp streamParams) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -302,10 +337,13 @@ func (p *Proxy) serveStream(w http.ResponseWriter, r *http.Request, upResp *http
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-AgentLedger-Stream", "true")
+	w.Header().Set("X-AgentLedger-Provider", sp.provider.String())
+	if sp.requestID != "" {
+		w.Header().Set("X-Request-Id", sp.requestID)
+	}
 	w.WriteHeader(upResp.StatusCode)
 	flusher.Flush()
 
-	var buf bytes.Buffer
 	scanner := bufio.NewScanner(upResp.Body)
 	// SSE chunks can exceed the default 64k scan buffer for tool-call deltas.
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -313,15 +351,17 @@ func (p *Proxy) serveStream(w http.ResponseWriter, r *http.Request, upResp *http
 	status := upResp.StatusCode
 	for scanner.Scan() {
 		line := scanner.Text()
-		buf.WriteString(line + "\n")
 		_, _ = fmt.Fprintln(w, line)
 		flusher.Flush()
 		if u, ok := parseUsageFromSSELine(line); ok && u != nil {
-			usage = *u
+			usage = sanitizeUsage(*u)
 		}
 	}
-	// NOTE: scanner.Err() on upstream EOF is nil; client disconnect surfaces
-	// via r.Context() — logged implicitly through status/latency, not fatal.
+	// scanner.Err() on upstream EOF is nil. When it is non-nil (e.g. a chunk
+	// exceeded the 1MB scan cap, or the client went away) we keep the usage
+	// counted so far and still emit the audit row — a partial count beats a
+	// dropped row. The error surfaces via status/latency, never fatal.
+	_ = scanner.Err()
 
 	cost, known := p.pricing.Cost(sp.model, usage.PromptTokens, usage.CompletionTokens)
 	latency := time.Since(sp.start)
@@ -339,13 +379,14 @@ func (p *Proxy) serveStream(w http.ResponseWriter, r *http.Request, upResp *http
 
 // parseUsageFromJSON extracts usage from a complete (non-stream) body.
 // Returns zero usage when the upstream returned an error payload.
+// Negative counters (never valid) are clamped to zero.
 func parseUsageFromJSON(body []byte, fallbackModel string) models.Usage {
 	var u upstreamUsage
 	if err := json.Unmarshal(body, &u); err != nil {
 		return models.Usage{}
 	}
 	_ = fallbackModel
-	return u.Usage
+	return sanitizeUsage(u.Usage)
 }
 
 // parseUsageFromSSELine extracts usage from one "data: {...}" line.
@@ -365,17 +406,59 @@ func parseUsageFromSSELine(line string) (*models.Usage, bool) {
 	if chunk.Usage == nil {
 		return nil, false
 	}
-	return chunk.Usage, true
+	u := sanitizeUsage(*chunk.Usage)
+	return &u, true
 }
 
 func attributionFromRequest(r *http.Request) models.Attribution {
 	return models.Attribution{
-		AgentID:       r.Header.Get(HeaderAgentID),
-		TeamID:        r.Header.Get(HeaderTeamID),
-		ProjectID:     r.Header.Get(HeaderProjectID),
-		ChainID:       r.Header.Get(HeaderChainID),
-		ParentAgentID: r.Header.Get(HeaderParentAgentID),
+		AgentID:       truncateTag(r.Header.Get(HeaderAgentID)),
+		TeamID:        truncateTag(r.Header.Get(HeaderTeamID)),
+		ProjectID:     truncateTag(r.Header.Get(HeaderProjectID)),
+		ChainID:       truncateTag(r.Header.Get(HeaderChainID)),
+		ParentAgentID: truncateTag(r.Header.Get(HeaderParentAgentID)),
 	}
+}
+
+// truncateTag bounds attribution tags before they reach logs/Postgres.
+// Truncation (not rejection) keeps the request flowing — a long team name
+// must never 400 an agent call.
+func truncateTag(s string) string {
+	if len(s) > maxTagLen {
+		return s[:maxTagLen]
+	}
+	return s
+}
+
+// sanitizeUsage clamps impossible counters to zero.
+func sanitizeUsage(u models.Usage) models.Usage {
+	if u.PromptTokens < 0 {
+		u.PromptTokens = 0
+	}
+	if u.CompletionTokens < 0 {
+		u.CompletionTokens = 0
+	}
+	if u.TotalTokens < 0 {
+		u.TotalTokens = 0
+	}
+	return u
+}
+
+// requestIDFromRequest joins tracing without new headers: reuse the
+// caller's X-Request-Id, else the attribution chain id, else a random id.
+// The value is safe to log (no secrets) and is echoed back as X-Request-Id.
+func requestIDFromRequest(r *http.Request) string {
+	if v := strings.TrimSpace(r.Header.Get("X-Request-Id")); v != "" {
+		return truncateTag(v)
+	}
+	if v := strings.TrimSpace(r.Header.Get(HeaderChainID)); v != "" {
+		return truncateTag(v)
+	}
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return ""
+	}
+	return "req_" + hex.EncodeToString(b[:])
 }
 
 func setAccountingHeaders(w http.ResponseWriter, provider Provider, cost float64, known bool, latency time.Duration) {
