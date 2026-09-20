@@ -11,6 +11,7 @@
 | # | File | Title | Phase |
 |---|------|-------|-------|
 | 01 | [01-vision-market-reality](./01-vision-market-reality.md) | Vision & Market Reality + Master Prompt + TokenOps | Why NOW, thesis, North Star |
+| 01 | [01-product-overview](./01-product-overview.md) | Product Overview: prompt, 10 market problems | Master prompt, 5-line summary, architecture |
 | 02 | [02-architecture-tech-stack](./02-architecture-tech-stack.md) | Architecture & Tech Stack | Detailed diagram + Next.js 15 stack |
 | 03 | [03-phase-0-foundation](./03-phase-0-foundation.md) | Phase 0: Foundation | Week 0, Day 1-3 (prequel) |
 | 04 | [04-phase-1-mirror](./04-phase-1-mirror.md) | Phase 1: The Mirror (Observe) | Week 1-2 — See it all — SHIP → HN |
@@ -24,6 +25,11 @@
 | 12 | [12-competitive-positioning](./12-competitive-positioning.md) | Competitive Positioning | 4-lane gap, moats, yield rate |
 | 13 | [13-metrics-risks-next-actions](./13-metrics-risks-next-actions.md) | Metrics, Risks & Next Actions | Targets + Monday list |
 | 14 | [14-dashboard-frontend](./14-dashboard-frontend.md) | Dashboard Frontend (Next.js App Router) | CNA scaffold, panels, run |
+| 15 | [15-frontend-overview-monorepo](./15-frontend-overview-monorepo.md) | Frontend Overview | Monorepo, journey, integrations, agents |
+| 16 | [16-frontend-landing](./16-frontend-landing.md) | Landing (`apps/web`, 14 sections) | Scroll story + AC per section |
+| 17 | [17-frontend-dashboard](./17-frontend-dashboard.md) | Dashboard (`apps/dashboard`, all pages) | Auth, shell, pages + AC |
+| 18 | [18-frontend-design-system](./18-frontend-design-system.md) | Design System | Tokens CSS, shadcn ui/primitives/blocks |
+| 19 | [19-frontend-build-plan](./19-frontend-build-plan.md) | Build Plan: onboarding, motion, state, perf, F0–F5 | Flow + presets + targets + checklists |
 
 ## Full Product Journey
 ```
@@ -36,7 +42,7 @@ See it all.      Stop paying      Right model,     Never blow       See the swar
 Phase 0 = prequel (bones). Phase 6 = sequel (enterprise/cloud). Core journey = 1-5.
 
 ## Reading Order
-`01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14`
+`01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19`
 
 ## Database
 **PostgreSQL 16** (Compose service `postgres`, DB `agentledger`). All persistence lives here: `request_logs` (spec 04 + migration 001 views), budgets/policies/`audit_log` (migration 002), `workflow_graphs`/`step_stats`/`roi_signals` (migration 003). Redis = exact cache, Qdrant = semantic vectors (both cache-only, no system-of-record data).
