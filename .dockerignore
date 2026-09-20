@@ -1,0 +1,5 @@
+bin/
+.git/
+specs/
+dashboard/node_modules/
+dashboard/.next/

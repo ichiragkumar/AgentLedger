@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: AgentLedger Proxy (Phase 1 Mirror)
+  version: 0.1.0
+  description: OpenAI-compatible reverse proxy. One env var, full visibility.
+servers:
+  - url: http://localhost:8787/v1
+paths:
+  /chat/completions:
+    post:
+      summary: Forward a chat completion upstream, log tokens + cost
+      parameters:
+        - $ref: '#/components/parameters/AgentLedgerKey'
+        - $ref: '#/components/parameters/AgentId'
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/ChainId'
+        - $ref: '#/components/parameters/ParentAgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model]
+              properties:
+                model:
+                  type: string
+                  example: gpt-4o-mini
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role: { type: string }
+                      content: { type: string }
+                stream:
+                  type: boolean
+      responses:
+        '200':
+          description: Upstream response relayed verbatim
+components:
+  parameters:
+    AgentLedgerKey:
+      name: AgentLedger-Key
+      in: header
+      required: true
+      schema: { type: string, example: vk_test }
+    AgentId: { name: X-Agent-Id, in: header, schema: { type: string } }
+    TeamId: { name: X-Team-Id, in: header, schema: { type: string } }
+    ProjectId: { name: X-Project-Id, in: header, schema: { type: string } }
+    ChainId: { name: X-Request-Chain-Id, in: header, schema: { type: string } }
+    ParentAgentId: { name: X-Parent-Agent-Id, in: header, schema: { type: string } }

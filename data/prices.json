@@ -1,0 +1,22 @@
+{
+  "version": "2026-09-20",
+  "currency": "USD",
+  "note": "USD per 1M tokens. Refresh via Registry.Reload (auto-update stub). Verify against provider invoices; goal invoice ±5%.",
+  "prices": {
+    "gpt-4o": { "input_per_1m": 2.5, "output_per_1m": 10.0 },
+    "gpt-4o-mini": { "input_per_1m": 0.15, "output_per_1m": 0.6 },
+    "gpt-5.5-pro": { "input_per_1m": 15.0, "output_per_1m": 120.0 },
+    "o1": { "input_per_1m": 15.0, "output_per_1m": 60.0 },
+    "o3-mini": { "input_per_1m": 1.1, "output_per_1m": 4.4 },
+    "claude-sonnet-4": { "input_per_1m": 3.0, "output_per_1m": 15.0 },
+    "claude-3-5-sonnet": { "input_per_1m": 3.0, "output_per_1m": 15.0 },
+    "claude-3-5-haiku": { "input_per_1m": 0.8, "output_per_1m": 4.0 },
+    "gemini-1.5-pro": { "input_per_1m": 1.25, "output_per_1m": 5.0 },
+    "gemini-1.5-flash": { "input_per_1m": 0.075, "output_per_1m": 0.3 },
+    "gemini-2.0-flash": { "input_per_1m": 0.1, "output_per_1m": 0.4 },
+    "deepseek-chat": { "input_per_1m": 0.14, "output_per_1m": 0.28 },
+    "deepseek-reasoner": { "input_per_1m": 0.55, "output_per_1m": 2.19 },
+    "deepseek-v4-flash": { "input_per_1m": 0.07, "output_per_1m": 0.28 },
+    "mistral-large-latest": { "input_per_1m": 2.0, "output_per_1m": 6.0 }
+  }
+}
