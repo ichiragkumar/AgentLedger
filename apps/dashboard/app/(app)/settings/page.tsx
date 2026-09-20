@@ -23,7 +23,7 @@ export default async function SettingsPage() {
           <input defaultValue="acme-prod" aria-label="Workspace name" className="w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
         </label>
         <p className="mt-2 text-xs text-zinc-500">Members management deferred — lands with auth (backend).</p>
-        <Link href="/overview" title="Onboarding replay target lands with auth flow (backend)" className="mt-2 inline-block text-sm text-indigo-600 hover:underline dark:text-indigo-400">
+        <Link href="/onboarding" title="Replay the 3-step onboarding (workspace → key → connection test)" className="mt-2 inline-block text-sm text-indigo-600 hover:underline dark:text-indigo-400">
           Replay onboarding →
         </Link>
       </section>

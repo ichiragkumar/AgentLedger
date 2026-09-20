@@ -119,3 +119,29 @@ package coverage **>80%** (7 `_test.go` files, one per module).
 - Embedding runtime — `all-MiniLM-L6-v2` sidecar (384-dim) behind
   `cache.Embedder`; e.g. Python `sentence-transformers` microservice or ONNX
   `fastembed` container. `EMBED_MODEL` env selects it.
+
+### Ship-track: dashboard end-to-end (2026-09-20, cache track builder)
+
+Go: no gaps — `gofmt -l` clean, `go vet` green, `go test` green at
+**93.3%** coverage. No `internal/cache/*` changes; proxy still on
+`CacheStub` (Mirror's 5-line patch pending), so live saver stats await
+chain wiring.
+
+Dashboard (all live, zero-state safe via `queryOrNull`/fail-open proxy client):
+
+| Piece | File | Notes |
+|---|---|---|
+| `GET /api/cache/stats` | `apps/dashboard/app/api/cache/stats/route.ts` | Tries `GET /v1/cache/stats` (1.5s); falls back to PG 7d context + zeroed cache fields (`source:"stub"`, `connected:false`) — never fabricated |
+| `GET/PUT /api/cache/config` | `apps/dashboard/app/api/cache/config/route.ts` | Validates threshold [0.80,0.99], ttlSeconds int [60,2592000]; upserts self-created `cache_config` row; mirrors `PUT /v1/cache/config` best-effort (`proxySynced`) |
+| `POST /api/cache/flush` | `apps/dashboard/app/api/cache/flush/route.ts` | Validates scope all\|agent\|team\|model (+value); maps to `DELETE /v1/cache[…]`; 200 + `proxySynced:false` until Mirror mounts it — never touches `request_logs` |
+| `useCache` extended (fetchers inline) | `apps/dashboard/lib/hooks/use-cache.ts` | stats/config/saveConfig( PUT )/flush( POST )/loading/saving/flushing/error/refresh |
+| Cache page rewritten (client) | `apps/dashboard/app/(app)/cache/page.tsx` | `use-cache` + `use-realtime`, skeletons, empty states, saver-stub banner, config save + toast, flush confirm dialog (scope/value, Esc), toasts `role=status` |
+
+Verify: `npx tsc --noEmit` clean; curls all 200 with shaped JSON
+(stats stub w/ live `requests7d:8`; config GET defaults → PUT persist →
+GET stored; PUT 400 on threshold 0.5; flush 200 `proxySynced:false`;
+flush 400 on missing value / bad scope). REQUIRED_ENV: none new
+(`PROXY_MGMT_BASE`, `DATABASE_URL` already set). Wiring: dashboard
+contracts proposed in `internal/cache/WIRING.md` (GET stats / PUT config /
+DELETE flush) for Mirror. Next step: Mirror applies chain patch +
+`GET /v1/cache/stats` → dashboard flips to `connected:true` with no code change.

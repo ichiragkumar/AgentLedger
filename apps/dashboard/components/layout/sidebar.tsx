@@ -10,7 +10,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
-import ThemeToggle from "@/components/theme-toggle";
 
 type NavItem = { href: string; label: string; badge?: string };
 type NavSection = { title: string; items: NavItem[] };
@@ -189,12 +188,11 @@ export default function Sidebar() {
               </>
             )}
           </ul>
-          <div className={`mt-2 flex items-center gap-2 px-2 ${collapsed ? "flex-col" : ""}`}>
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white" title="Workspace avatar">
-              A
-            </span>
-            {!collapsed && <ThemeToggle />}
-          </div>
+          {/* Account + preferences (theme, workspace, sign out) live in the
+              profile menu, top-right in the topbar. */}
+          {!collapsed && (
+            <p className="mt-2 px-2 text-[11px] text-zinc-400">v0.1.0 · Apache 2.0</p>
+          )}
         </div>
       </aside>
     </>

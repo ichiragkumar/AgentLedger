@@ -5,13 +5,36 @@
 // workspaces/search state lifts to dashboard.store + filter.store (backend).
 // TODO(API): workspaces list via auth/session (ledger-web-backend).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import ProfileMenu from "@/components/layout/profile-menu";
+import { useDashboardStore, type Workspace } from "@/lib/stores/dashboard.store";
 
-const MOCK_WORKSPACES = ["acme-prod", "acme-staging"];
+const FALLBACK_WORKSPACES = ["acme-prod", "acme-staging"];
 
 export default function Topbar() {
-  const [workspace, setWorkspace] = useState(MOCK_WORKSPACES[0]);
   const [open, setOpen] = useState(false);
+  const [names, setNames] = useState<string[]>(FALLBACK_WORKSPACES);
+  const { workspaceName, setWorkspace } = useDashboardStore();
+  const workspace = workspaceName ?? names[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/onboarding/workspace", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        if (cancelled) return;
+        const list = (b?.workspaces ?? []) as Workspace[];
+        if (list.length > 0) {
+          setNames(list.map((w) => w.name));
+          if (!workspaceName) setWorkspace(list[0].id, list[0].name);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <header className="flex items-center gap-3 border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950">
@@ -31,14 +54,14 @@ export default function Topbar() {
         </button>
         {open && (
           <ul role="listbox" aria-label="Workspace" className="absolute left-0 z-30 mt-1 w-48 rounded-md border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-            {MOCK_WORKSPACES.map((w) => (
+            {names.map((w) => (
               <li key={w}>
                 <button
                   type="button"
                   role="option"
                   aria-selected={w === workspace}
                   onClick={() => {
-                    setWorkspace(w);
+                    setWorkspace(null, w);
                     setOpen(false);
                   }}
                   className="block w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -63,11 +86,13 @@ export default function Topbar() {
 
       <span
         title="Live proxy status arrives via SSE (use-realtime, backend). Static mock."
-        className="ml-auto hidden items-center gap-1.5 rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 sm:inline-flex dark:bg-zinc-800 dark:text-zinc-300"
+        className="hidden items-center gap-1.5 rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 sm:inline-flex dark:bg-zinc-800 dark:text-zinc-300"
       >
         <span aria-hidden className="h-2 w-2 rounded-full bg-zinc-400" />
         Proxy: mock
       </span>
+
+      <ProfileMenu />
     </header>
   );
 }

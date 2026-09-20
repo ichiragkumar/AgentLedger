@@ -26,7 +26,7 @@ export default auth((req) => {
   const guarded = PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   if (guarded && !req.auth) {
     const url = req.nextUrl.clone();
-    url.pathname = "/api/auth/signin";
+    url.pathname = "/login";
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
   }

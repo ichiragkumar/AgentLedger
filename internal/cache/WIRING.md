@@ -56,6 +56,39 @@ hook.Cost = func(model string, in, out int) (float64, bool) {
 // DELETE /v1/cache?model=X          → cache.PurgeByModel(...)
 ```
 
+## Dashboard ship-track (2026-09-20): `/api/cache/*` live, proxy endpoints proposed
+
+Dashboard (`apps/dashboard/app/api/cache/*`, owner: cache ship-track) is
+LIVE against Postgres + best-effort proxy calls. Until Mirror mounts the
+routes below, dashboard responses stay 200 with `connected:false` /
+`proxySynced:false` (zero-state, never fabricated). No `server.go` /
+`middleware.go` edits here — Mirror applies these.
+
+### Proposed Mirror additions (exact shapes the dashboard already expects)
+
+```go
+// GET /v1/cache/stats → hook.Stats.Snapshot() + store sizes, JSON:
+//   {"hit_rate":0.42,"exact_hits":120,"semantic_hits":30,"misses":210,
+//    "saved_usd":12.5,"size":340,"avg_lookup_ms":8.5,"threshold":0.92}
+// Dashboard GET /api/cache/stats calls this with a 1.5s timeout; any
+// non-2xx falls back to Postgres 7d context + zeroed cache fields.
+
+// PUT /v1/cache/config ← JSON:
+//   {"similarity_threshold":0.9,"default_ttl_secs":1800,
+//    "enabled":true,"guard_enabled":true}
+// → 200 {"applied":true}. Values mirror cache.Config; sanitize() clamps
+// the threshold to [0.85,0.99]. Dashboard PUT /api/cache/config persists
+// to Postgres first (table cache_config, self-created), then mirrors here.
+
+// DELETE /v1/cache[?agent=X|?team=X|?model=X] → Purge{All,ByAgent,ByTeam,ByModel}
+// → 200 PurgeResult {"exact_removed":N,"semantic_removed":M}.
+// Dashboard POST /api/cache/flush maps {scope,value} to these paths.
+```
+
+Chain patch from above (5-line `CacheStub` → `hook.Middleware` swap) is
+still the live-data prerequisite: without it the hook never records
+`Stats`, so `GET /v1/cache/stats` would report zeros even when mounted.
+
 ## Production backends (no code change in proxy path)
 
 - `REDIS_URL` set → swap `hook.Exact` for the Redis adapter implementing

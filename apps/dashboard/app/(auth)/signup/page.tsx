@@ -1,6 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 
-export default function SignupPage() {
+export default async function SignupPage() {
+  const session = await auth();
+  if (session?.user) redirect("/overview");
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-5 px-6">
       <div>
@@ -9,7 +13,7 @@ export default function SignupPage() {
       </div>
       <Link
         href="/login"
-        className="rounded-lg bg-green-700 px-4 py-2 text-center text-sm font-medium text-white hover:bg-green-800"
+        className="rounded-lg bg-indigo-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-indigo-500"
       >
         Continue to sign in
       </Link>

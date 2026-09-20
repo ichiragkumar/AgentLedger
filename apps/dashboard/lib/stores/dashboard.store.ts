@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+export type Workspace = { id: string; name: string; created_at: string };
+
 type DashboardState = {
   workspaceId: string | null;
   workspaceName: string | null;

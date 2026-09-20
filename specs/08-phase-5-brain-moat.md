@@ -112,3 +112,45 @@ frontier only where failure is expensive, cheapest where it is not.
 3. Publish: cost before/after, per-step model map, yield-flat proof,
    "cost $2.30 → $45 value" ROI anecdote. Blog: "Why per-request routing
    is broken for agent swarms — and what to do about it."
+
+### Ship-track status — topology LIVE in dashboard (2026-09-20, ledger-ship-topology)
+
+Decision: **pure SVG, no `reactflow`**. The sibling-owned `TopologyPanel`
+renders <1s at 20 nodes in one pass with zero deps; reactflow would add
+bundle weight + a dep approval for no AC gain. Keyboard/mobile access
+comes from the page layer (native workflow `<select>` + step links).
+
+Files (all NEW except page rewrite + waitlist adoption + this append):
+`apps/dashboard/app/api/topology/route.ts` (GET list — merges
+`workflow_graphs` + `request_logs` chain fallback, zero-state `{ workflows:
+[] }`), `apps/dashboard/app/api/topology/[chainId]/route.ts` (GET detail —
+BFS depths, per-step cost/mode-model/failure rate, `step_stats` refinement,
+heuristic criticality flagged `criticalitySource: "heuristic"`,
+`savingsVsUniform: null` until optimizer weights land, 404 JSON when
+unknown), `apps/dashboard/lib/hooks/use-topology.ts` (plain-fetch hook,
+auto-selects first workflow), `apps/dashboard/app/(app)/topology/page.tsx`
+(client rewrite — Coming banner stays until data flows, mock Content
+Pipeline otherwise, live source badge + step-link nav), 11×
+`app/(app)/**/loading.tsx` (agents, agents/[id], overview, cache, routing,
+budgets, policies, keys, requests, settings, topology — group loading
+already existed, these were the absent per-route ones),
+`apps/web/app/api/waitlist/route.ts` (Postgres `waitlist_emails`,
+idempotent by email, 5/60s per-IP sliding window → 429 + Retry-After,
+fail-closed 503; contract `{ ok }` unchanged).
+
+Verification: `npx tsc --noEmit` clean in BOTH apps; `npm run build`
+green in apps/web (12 routes, `/api/waitlist` dynamic). Curled live:
+empty list + 404 detail zero-state; seeded chain proved Brain-row path AND
+`request_logs`-fallback path (depths/tiers/edges correct); waitlist
+valid→200, duplicate→`{ok,duplicate}`, invalid→400, 6th-hit→429. All
+test rows purged (`workflow_graphs` 0, chained logs 0, waitlist 0). Go
+untouched.
+
+REQUIRED_ENV: `DATABASE_URL` for apps/web (same value as dashboard; web
+has no `.env` yet). Coordinator should add `pg` + `@types/pg` to
+apps/web/package.json (currently resolves via workspace hoisting).
+Multi-instance prod needs Redis-backed waitlist rate limiting.
+
+Next step: Brain weight pushes (`SetWeights`) to flip `criticalitySource`
+to model-backed and fill `savingsVsUniform`; then remove the Coming banner
+copy once ≥1 real chain flows for 7 days.

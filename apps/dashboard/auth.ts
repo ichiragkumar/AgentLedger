@@ -12,6 +12,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
+  // All sign-in flows land on our custom /login (which itself redirects
+  // logged-in users to /overview). The built-in Auth.js signin page — which
+  // would list every stub provider — is never shown.
+  pages: { signIn: "/login" },
   providers: [
     GitHub,
     // Dev login (LOCAL ONLY, never production): email+password from env,
