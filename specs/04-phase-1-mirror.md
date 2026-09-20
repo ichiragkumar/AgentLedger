@@ -87,4 +87,4 @@ OpenAI-compatible reverse proxy that logs every request with token counts, costs
 - DB: db/migrations/001_mirror_hardening.sql (composite team/agent/model×ts indexes, chain index, nonneg CHECKs, v_spend_24h/7d/30d + by model/agent/team + top-10 views).
 - Dashboard shell: dashboard/package.json (next@15/react/recharts/next-auth), app/page.tsx (spend + 4 panels), lib/api.ts, .env.local.example.
 - Env: .env.example + .env created (all phases; secrets empty except vk_dev dummy).
-- Stubs intact for saver/router/enforcer/brain (CacheStub MISS, RouteStub model-prefix, EnforceStub pass-through). Remaining: real Postgres INSERT (pgx, needs go.mod dep), Next.js route handlers + layout.
+- Stubs intact for saver/router/enforcer/brain (CacheStub MISS, RouteStub model-prefix, EnforceStub pass-through). Remaining: real Postgres INSERT (pgx, needs go.mod dep), Next.js `app/api/*` route handlers. Dashboard shell is now real CNA (see spec 14).

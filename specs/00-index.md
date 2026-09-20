@@ -23,6 +23,7 @@
 | 11 | [11-gtm-timeline](./11-gtm-timeline.md) | GTM + Timeline + Through Line | 18-week journey + 24-week with 0/6 |
 | 12 | [12-competitive-positioning](./12-competitive-positioning.md) | Competitive Positioning | 4-lane gap, moats, yield rate |
 | 13 | [13-metrics-risks-next-actions](./13-metrics-risks-next-actions.md) | Metrics, Risks & Next Actions | Targets + Monday list |
+| 14 | [14-dashboard-frontend](./14-dashboard-frontend.md) | Dashboard Frontend (Next.js App Router) | CNA scaffold, panels, run |
 
 ## Full Product Journey
 ```
@@ -35,7 +36,10 @@ See it all.      Stop paying      Right model,     Never blow       See the swar
 Phase 0 = prequel (bones). Phase 6 = sequel (enterprise/cloud). Core journey = 1-5.
 
 ## Reading Order
-`01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13`
+`01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14`
+
+## Database
+**PostgreSQL 16** (Compose service `postgres`, DB `agentledger`). All persistence lives here: `request_logs` (spec 04 + migration 001 views), budgets/policies/`audit_log` (migration 002), `workflow_graphs`/`step_stats`/`roi_signals` (migration 003). Redis = exact cache, Qdrant = semantic vectors (both cache-only, no system-of-record data).
 
 ## Naming Convention
 `NN-kebab-case.md` — zero-padded sequence, kebab-case slug. Index is `00-index.md` (this file).

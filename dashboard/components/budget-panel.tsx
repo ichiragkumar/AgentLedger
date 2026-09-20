@@ -114,7 +114,7 @@ export function BudgetPanel({
               tick={{ fontSize: 11 }}
               tickFormatter={(v: number) => `$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`}
             />
-            <Tooltip formatter={(v: number | undefined) => fmtUSD(v ?? 0)} />
+            <Tooltip formatter={(v: unknown) => fmtUSD(Number(v ?? 0))} />
             <Legend />
             <ReferenceLine
               y={budgetUSD}
