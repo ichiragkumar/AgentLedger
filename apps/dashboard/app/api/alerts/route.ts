@@ -1,4 +1,5 @@
 import { queryOrNull } from "@/lib/db";
+import { mgmtHeaders, proxyFetch } from "../_lib/proxy-mgmt";
 
 export const dynamic = "force-dynamic";
 
@@ -6,11 +7,8 @@ export const dynamic = "force-dynamic";
 //
 // Reads Postgres audit_log (append-only, hash-chained per migration 002) and
 // derives threshold warnings from budgets utilization. Zero-state safe.
-//
-// TODO(PROXY): the Go Dispatcher fans out within 60s of a breach and the
-// in-memory AuditChain mirrors audit_log; once the proxy mounts the enforce
-// API, merge GET /v1/audit here and forward POST /v1/alerts. Needed proxy
-// endpoints: GET /v1/audit, GET/POST /v1/alerts, DELETE /v1/alerts/{id}.
+// The Go Dispatcher fans out within 60s of a breach and its in-memory
+// AuditChain mirrors the same stream; POST below targets the live plane.
 
 type AuditRow = {
   seq: string;
@@ -106,33 +104,24 @@ export async function GET(req: Request) {
   return Response.json({ alerts: alerts.slice(0, limit) });
 }
 
-// POST /api/alerts — alert-routing configs live in the Go AlertRegistry
-// (in-memory; no Postgres table). Proxy to the management plane when it
-// lands; until then fail closed with a documented stub (never fake success).
+// POST /api/alerts — alert-routing configs live in the Go AlertRegistry.
+// Proxied to the live management plane (POST /v1/alerts); the dashboard
+// sends the admin actor headers the Go RBAC requires. Fail-closed 503 when
+// the proxy is unreachable (never fake success).
 export async function POST(req: Request) {
-  const proxyBase = process.env.PROXY_MGMT_BASE ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
   let body: unknown = null;
   try {
     body = await req.json();
   } catch {
     body = null;
   }
-  try {
-    const res = await fetch(`${proxyBase}/v1/alerts`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(2000),
-    });
-    if (!res.ok) throw new Error(`proxy status ${res.status}`);
-    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    return Response.json(data, { status: res.status });
-  } catch {
-    // TODO(PROXY): needs POST /v1/alerts on the Go management plane
-    // (internal/enforce/api.go handleAlerts — mount API.RegisterRoutes).
-    return Response.json(
-      { error: "proxy_unreachable", todo: "PROXY: mount enforce management plane (POST /v1/alerts)" },
-      { status: 503 }
-    );
-  }
+  const live = await proxyFetch<Record<string, unknown>>("/v1/alerts", {
+    method: "POST",
+    headers: mgmtHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (live.ok) return Response.json(live.data, { status: live.status });
+  if (live.status === 400) return Response.json({ error: "invalid_alert" }, { status: 400 });
+  if (live.status === 403) return Response.json({ error: "forbidden" }, { status: 403 });
+  return Response.json({ error: "proxy_unreachable" }, { status: 503 });
 }

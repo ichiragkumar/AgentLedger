@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { queryOrNull } from "@/lib/db";
+import { mgmtHeaders, proxyFetch } from "../_lib/proxy-mgmt";
 
 export const dynamic = "force-dynamic";
 
@@ -9,11 +10,12 @@ export const dynamic = "force-dynamic";
 // Agent, soft-alert thresholds 50/75/90, auto-downgrade at 90%, hard stop at
 // 100%, linear forecast ("at this rate $X by month end").
 //
-// TODO(PROXY): forward mutations to the Go management plane
-// (GET/POST /v1/budgets, PUT/DELETE /v1/budgets/{id}) once the proxy mounts
-// the enforce API — today the proxy serves the data plane only and answers
-// /v1/* with 404. Reads below are live Postgres; the durable-sink wiring
-// (Go Store ↔ budgets table) is a Phase 4.5 task per internal/enforce/api.go.
+// READS are live Postgres (rich utilization/forecast/history views over
+// request_logs). WRITES persist to Postgres first (durable), then mirror
+// best-effort to the Go management plane (POST/PUT/DELETE /v1/budgets[/{id}])
+// so the in-memory enforcer enforces the same limits without a restart.
+// Responses carry proxySynced:false when the mirror failed — the durable
+// write still won; enforcement catches up on the next successful write.
 
 type BudgetRow = {
   id: string;
@@ -130,6 +132,39 @@ async function toView(b: BudgetRow, withHistory: boolean): Promise<BudgetView> {
   return view;
 }
 
+// Go enforcer IDs are `level:key:window` (see Store.Upsert) — the address
+// for mirrored PUT/DELETE. Best-effort: failure never fails the durable write.
+function goIdFor(level: string, key: string, window: string): string {
+  return `${level}:${key}:${window}`;
+}
+
+async function mirrorCreate(p: { level: string; key: string; window: string; tokenLimit: number; dollarLimit: number }): Promise<boolean> {
+  const r = await proxyFetch("/v1/budgets", {
+    method: "POST",
+    headers: mgmtHeaders(),
+    body: JSON.stringify({ level: p.level, key: p.key, window: p.window, token_limit: p.tokenLimit, dollar_limit: p.dollarLimit }),
+  });
+  return r.ok;
+}
+
+async function mirrorUpdate(
+  goId: string,
+  p: { level: string; key: string; window: string; tokenLimit: number; dollarLimit: number }
+): Promise<boolean> {
+  const r = await proxyFetch(`/v1/budgets/${encodeURIComponent(goId)}`, {
+    method: "PUT",
+    headers: mgmtHeaders(),
+    body: JSON.stringify({ level: p.level, key: p.key, window: p.window, token_limit: p.tokenLimit, dollar_limit: p.dollarLimit }),
+  });
+  return r.ok;
+}
+
+async function mirrorDelete(goId: string): Promise<boolean> {
+  const r = await proxyFetch(`/v1/budgets/${encodeURIComponent(goId)}`, { method: "DELETE", headers: mgmtHeaders() });
+  // 404 = enforcer never had it (e.g. created while proxy was down) — in sync.
+  return r.ok || r.status === 404;
+}
+
 function validPayload(p: { level?: string; key?: string; window?: string; tokenLimit?: number; dollarLimit?: number }) {
   return (
     p &&
@@ -188,7 +223,10 @@ export async function POST(req: Request) {
     [id, p.level, p.key, p.ownerTeam, p.window, p.tokenLimit, p.dollarLimit]
   );
   if (!rows?.[0]) return Response.json({ error: "unavailable" }, { status: 503 });
-  return Response.json({ budget: await toView(rows[0], false) }, { status: 201 });
+  const synced = await mirrorCreate(p);
+  const res: Record<string, unknown> = { budget: await toView(rows[0], false) };
+  if (!synced) res.proxySynced = false;
+  return Response.json(res, { status: 201 });
 }
 
 // PUT /api/budgets?id= {tokenLimit?,dollarLimit?,window?} — raise/lower limits.
@@ -216,14 +254,28 @@ export async function PUT(req: Request) {
     ]
   );
   if (!rows?.[0]) return Response.json({ error: "not_found" }, { status: 404 });
-  return Response.json({ budget: await toView(rows[0], false) });
+  const b = rows[0];
+  const synced = await mirrorUpdate(goIdFor(b.level, b.scope_key, b.scope_window), {
+    level: b.level,
+    key: b.scope_key,
+    window: body.window === undefined ? b.scope_window : String(body.window),
+    tokenLimit: body.tokenLimit === undefined ? Number(b.token_limit) : Number(body.tokenLimit),
+    dollarLimit: body.dollarLimit === undefined ? Number(b.dollar_limit) : Number(body.dollarLimit),
+  });
+  const res: Record<string, unknown> = { budget: await toView(b, false) };
+  if (!synced) res.proxySynced = false;
+  return Response.json(res);
 }
 
 // DELETE /api/budgets?id=
 export async function DELETE(req: Request) {
   const id = new URL(req.url).searchParams.get("id") ?? "";
   if (!id) return Response.json({ error: "missing_id" }, { status: 400 });
-  const rows = await queryOrNull<{ id: string }>(`DELETE FROM budgets WHERE id = $1 RETURNING id`, [id]);
+  const rows = await queryOrNull<BudgetRow>(`DELETE FROM budgets WHERE id = $1 RETURNING *`, [id]);
   if (!rows?.[0]) return Response.json({ error: "not_found" }, { status: 404 });
-  return Response.json({ deleted: id });
+  const b = rows[0];
+  const synced = await mirrorDelete(goIdFor(b.level, b.scope_key, b.scope_window));
+  const res: Record<string, unknown> = { deleted: id };
+  if (!synced) res.proxySynced = false;
+  return Response.json(res);
 }

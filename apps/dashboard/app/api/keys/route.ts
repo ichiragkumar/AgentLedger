@@ -1,22 +1,60 @@
-import { issueKey, listKeys, revokeKey, rotateKey } from "../_lib/virtual-keys";
+import { mgmtHeaders, proxyFetch } from "../_lib/proxy-mgmt";
+import {
+  issueKey as localIssue,
+  listKeys as localList,
+  revokeKey as localRevoke,
+  rotateKey as localRotate,
+  type PublicKey,
+} from "../_lib/virtual-keys";
 
 export const dynamic = "force-dynamic";
 
-// Virtual Key Vault API.
+// Virtual Key Vault API — proxy-first, Postgres fallback.
 //
-// Semantics mirror the Go vault contract (internal/auth/auth.go + spec 17):
-// full key shown ONCE at creation/rotation, last-4 + prefix afterwards,
-// revoke is instant, rotate carries a configurable grace window. Plaintext
-// provider keys are NEVER logged or stored — only sha256 + safe slices.
-//
-// TODO(PROXY): sync with the Go management plane once it exposes a key
-// vault API. Needed proxy endpoints: POST /v1/keys, DELETE /v1/keys/{id},
-// POST /v1/keys/{id}/rotate, GET /v1/keys (prefix-only).
+// The Go vault (internal/auth/vault.go, mounted at /v1/keys) shares the SAME
+// virtual_keys table the dashboard used to own, so either issuer's keys
+// resolve on the data plane. Dashboard routes forward to Go first (single
+// live issuer → budgets/enforcement see the same keys) and fall back to the
+// local PG helpers when the proxy is unreachable, so pages never 500.
+// Shapes below map Go's snake_case KeyInfo/IssuedKey onto the existing
+// PublicKey contract — UI and hooks are untouched.
+
+type GoKeyInfo = {
+  id: string;
+  name: string;
+  agent_scope: string;
+  team_scope: string;
+  prefix: string;
+  last4: string;
+  created_at: string;
+  last_used_at?: string | null;
+  revoked: boolean;
+};
+
+type GoIssued = GoKeyInfo & { key: string };
+
+function toPublic(g: GoKeyInfo): PublicKey {
+  return {
+    id: g.id,
+    name: g.name,
+    agentScope: g.agent_scope ?? "",
+    teamScope: g.team_scope ?? "",
+    prefix: g.prefix,
+    last4: g.last4,
+    createdAt: g.created_at,
+    lastUsedAt: g.last_used_at ?? null,
+    status: g.revoked ? "revoked" : "active",
+    rotatedFrom: null,
+    graceExpiresAt: null,
+  };
+}
 
 // GET /api/keys — prefix/last4 list only. Full keys are never returned here.
 export async function GET() {
+  const live = await proxyFetch<{ keys: GoKeyInfo[] }>("/v1/keys", { headers: mgmtHeaders() });
+  if (live.ok) return Response.json({ keys: (live.data.keys ?? []).map(toPublic), source: "proxy" });
   try {
-    return Response.json({ keys: await listKeys() });
+    return Response.json({ keys: await localList(), source: "postgres-fallback" });
   } catch {
     return Response.json({ keys: [] });
   }
@@ -32,18 +70,22 @@ export async function POST(req: Request) {
   }
   const name = (body.name ?? "").trim();
   if (!name) return Response.json({ error: "missing_name" }, { status: 400 });
-  try {
-    const { key, fullKey } = await issueKey({
-      name,
-      agentScope: body.agentScope ?? "",
-      teamScope: body.teamScope ?? "",
-    });
+
+  const live = await proxyFetch<GoIssued>("/v1/keys", {
+    method: "POST",
+    headers: mgmtHeaders(),
+    body: JSON.stringify({ name, agent_scope: body.agentScope ?? "", team_scope: body.teamScope ?? "" }),
+  });
+  if (live.ok) {
     return Response.json(
-      {
-        key,
-        fullKey,
-        warning: "Shown ONCE — copy now. It is never stored or shown again.",
-      },
+      { key: toPublic(live.data), fullKey: live.data.key, warning: "Shown ONCE — copy now. It is never stored or shown again." },
+      { status: 201 }
+    );
+  }
+  try {
+    const { key, fullKey } = await localIssue({ name, agentScope: body.agentScope ?? "", teamScope: body.teamScope ?? "" });
+    return Response.json(
+      { key, fullKey, warning: "Shown ONCE — copy now. It is never stored or shown again.", proxySynced: false },
       { status: 201 }
     );
   } catch {
@@ -55,10 +97,19 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const id = new URL(req.url).searchParams.get("id") ?? "";
   if (!id) return Response.json({ error: "missing_id" }, { status: 400 });
+
+  // Capture the pre-image for the {revoked, key} contract before revoking.
+  const before = await proxyFetch<{ keys: GoKeyInfo[] }>("/v1/keys", { headers: mgmtHeaders() });
+  if (before.ok) {
+    const found = (before.data.keys ?? []).find((k) => k.id === id);
+    const res = await proxyFetch(`/v1/keys/${encodeURIComponent(id)}`, { method: "DELETE", headers: mgmtHeaders() });
+    if (res.ok) return Response.json({ revoked: id, key: found ? toPublic(found) : null, source: "proxy" });
+    if (res.status === 404) return Response.json({ error: "not_found" }, { status: 404 });
+  }
   try {
-    const key = await revokeKey(id);
+    const key = await localRevoke(id);
     if (!key) return Response.json({ error: "not_found" }, { status: 404 });
-    return Response.json({ revoked: id, key });
+    return Response.json({ revoked: id, key, proxySynced: false });
   } catch {
     return Response.json({ error: "unavailable" }, { status: 503 });
   }
@@ -70,13 +121,25 @@ export async function PUT(req: Request) {
   const id = url.searchParams.get("id") ?? "";
   const graceSeconds = Math.min(Math.max(Number(url.searchParams.get("graceSeconds") ?? 3600) || 3600, 0), 7 * 86400);
   if (!id) return Response.json({ error: "missing_id" }, { status: 400 });
-  try {
-    const rotated = await rotateKey(id, graceSeconds);
-    if (!rotated) return Response.json({ error: "not_found_or_revoked" }, { status: 404 });
+
+  const live = await proxyFetch<GoIssued>(`/v1/keys/${encodeURIComponent(id)}/rotate`, {
+    method: "POST",
+    headers: mgmtHeaders(),
+    body: JSON.stringify({ grace_seconds: graceSeconds }),
+  });
+  if (live.ok) {
     return Response.json({
-      ...rotated,
-      warning: "New key shown ONCE. Old key stays valid until graceExpiresAt.",
+      key: toPublic(live.data),
+      fullKey: live.data.key,
+      warning: "New key shown ONCE. Old key stays valid until grace expires.",
+      source: "proxy",
     });
+  }
+  if (live.status === 404) return Response.json({ error: "not_found_or_revoked" }, { status: 404 });
+  try {
+    const rotated = await localRotate(id, graceSeconds);
+    if (!rotated) return Response.json({ error: "not_found_or_revoked" }, { status: 404 });
+    return Response.json({ ...rotated, warning: "New key shown ONCE. Old key stays valid until graceExpiresAt.", proxySynced: false });
   } catch {
     return Response.json({ error: "unavailable" }, { status: 503 });
   }
