@@ -25,6 +25,8 @@ All agents (human-invoked or via Task tool) must follow it.
 
 Pre-monorepo: current `dashboard/` is ledger-mirror's home (shell, lib, config) + dashboard panels per phase owners above. Web agents build under `apps/` only after migration; until then they plan, do NOT create `apps/` unilaterally.
 
+**Migration LANDED (spec 20): `dashboard/` → `apps/dashboard/`, `apps/web` live, `packages/*` stubs. Web agents now build under `apps/` freely within their rows above. Mirror retains `apps/dashboard/app/*` shell/lib/config + `.env*`. Task-tool note: only `general` + `ledger-*` backend types exist — web roles run on `general` workers instructed to read their `.opencode/agents/ledger-web-*.md` file first.**
+
 Shared-but-append-only: `specs/00-index.md`, `specs/11-*`, `specs/13-*` (coordinator edits only).
 
 ## Hard rules

@@ -30,6 +30,7 @@
 | 17 | [17-frontend-dashboard](./17-frontend-dashboard.md) | Dashboard (`apps/dashboard`, all pages) | Auth, shell, pages + AC |
 | 18 | [18-frontend-design-system](./18-frontend-design-system.md) | Design System | Tokens CSS, shadcn ui/primitives/blocks |
 | 19 | [19-frontend-build-plan](./19-frontend-build-plan.md) | Build Plan: onboarding, motion, state, perf, F0–F5 | Flow + presets + targets + checklists |
+| 20 | [20-frontend-build-status](./20-frontend-build-status.md) | Build Status (living) | Where we are / did / left + decisions |
 
 ## Full Product Journey
 ```
@@ -42,7 +43,7 @@ See it all.      Stop paying      Right model,     Never blow       See the swar
 Phase 0 = prequel (bones). Phase 6 = sequel (enterprise/cloud). Core journey = 1-5.
 
 ## Reading Order
-`01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19`
+`01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19 → 20`
 
 ## Database
 **PostgreSQL 16** (Compose service `postgres`, DB `agentledger`). All persistence lives here: `request_logs` (spec 04 + migration 001 views), budgets/policies/`audit_log` (migration 002), `workflow_graphs`/`step_stats`/`roi_signals` (migration 003). Redis = exact cache, Qdrant = semantic vectors (both cache-only, no system-of-record data).

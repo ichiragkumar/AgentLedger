@@ -1,0 +1,49 @@
+/* AgentLedger Tailwind preset — owner: ledger-web-system.
+   Canonical reference for the spec-18 token system. Apps keep their own
+   app/globals.css as the wired copy (font-var lines differ per app:
+   web → --font-sans/--font-mono, dashboard → --font-geist-*).
+   Adopt by copying this block into globals.css, then set the two
+   --font-* lines to the app's next/font variables. */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;            --foreground: 240 10% 4%;
+    --card: 0 0% 100%;                  --card-foreground: 240 10% 4%;
+    --popover: 0 0% 100%;               --popover-foreground: 240 10% 4%;
+    --primary: 243 75% 58%;             --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 96%;            --secondary-foreground: 240 6% 10%;
+    --muted: 240 5% 96%;                --muted-foreground: 240 4% 46%;
+    --accent: 162 63% 41%;              --accent-foreground: 0 0% 100%;
+    --savings: 142 71% 45%;             --overspend: 0 84% 60%;   --warning: 38 92% 50%;
+    --border: 240 6% 90%;               --input: 240 6% 90%;      --ring: 243 75% 58%;
+    --chart-1: 243 75% 58%;             --chart-2: 162 63% 41%;
+    --chart-3: 38 92% 50%;              --chart-4: 0 84% 60%;
+    --chart-5: 271 70% 55%;
+    --radius: 0.5rem;
+  }
+  .dark {
+    --background: 240 10% 4%;           --foreground: 0 0% 98%;
+    --card: 240 10% 6%;                 --card-foreground: 0 0% 98%;
+    --popover: 240 10% 6%;              --popover-foreground: 0 0% 98%;
+    --primary: 243 75% 66%;             --primary-foreground: 0 0% 100%;
+    --secondary: 240 4% 16%;            --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 16%;                --muted-foreground: 240 5% 65%;
+    --accent: 162 63% 50%;              --accent-foreground: 0 0% 100%;
+    --savings: 142 71% 52%;             --overspend: 0 84% 65%;   --warning: 38 92% 56%;
+    --border: 240 4% 16%;               --input: 240 4% 16%;      --ring: 243 75% 66%;
+    --chart-1: 243 75% 66%;             --chart-2: 162 63% 50%;
+    --chart-3: 38 92% 56%;              --chart-4: 0 84% 65%;
+    --chart-5: 271 70% 65%;
+  }
+}
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.grid-bg {
+  background-image:
+    linear-gradient(hsl(var(--border)) 1px, transparent 1px),
+    linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+}

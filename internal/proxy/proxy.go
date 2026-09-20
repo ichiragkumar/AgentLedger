@@ -49,6 +49,7 @@ const (
 type Proxy struct {
 	pricing coster
 	auth    auth.Resolver
+	vault   *auth.Vault // optional: accepts vault-issued vk_* keys (mgmt plane)
 	log     logger.Logger
 	metrics *Metrics
 	client  *http.Client
@@ -65,6 +66,9 @@ type coster interface {
 type Config struct {
 	Pricing *pricing.Registry
 	Auth    auth.Resolver
+	// Vault optionally accepts management-plane-issued vk_* keys on the
+	// data path (checked after Auth). Nil = virtual keys from Auth only.
+	Vault   *auth.Vault
 	Log     logger.Logger
 	Metrics *Metrics
 	// Client overrides http.DefaultClient (tests inject mock transport).
@@ -92,6 +96,7 @@ func New(cfg Config) *Proxy {
 	return &Proxy{
 		pricing: cfg.Pricing,
 		auth:    cfg.Auth,
+		vault:   cfg.Vault,
 		log:     cfg.Log,
 		metrics: m,
 		client:  client,
@@ -173,6 +178,10 @@ func (p *Proxy) ServeChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resolution, err := p.auth.Resolve(vk)
+	if err != nil && p.vault != nil {
+		// Management-plane-issued keys (POST /v1/keys) resolve here.
+		resolution, err = p.vault.Resolve(vk)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid virtual key"})
 		return
