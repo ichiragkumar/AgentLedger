@@ -2,15 +2,29 @@
 
 > Prev: [04-phase-1-mirror](./04-phase-1-mirror.md) | Parent: [00-index](./00-index.md) | Next: [06-phase-3-router](./06-phase-3-router.md)
 
-### *Pitch: "Save 20-40% on LLM costs with zero code changes."*
+### *Pitch: "Stop paying for the same answer twice."*
+### *Pitch line: "Same question, different words. One API call instead of five."*
+
+## The Problem You're Solving
+Semantic caching eliminates roughly 31% of redundant queries before any API call is made and can cut LLM calls by 30–60% in production.
+
+Real-world example: naive MCP (all 200+ tool definitions per request) across eight servers. Code mode alone cut tokens per request by 55%. Adding semantic caching for FAQ cut inference calls by another 40%.
 
 ## What You Ship
 Semantic caching + exact-match caching that eliminates redundant LLM calls.
 
+```
+✓ Exact-match cache        →  SHA-256 hash → Redis → <1ms lookup
+✓ Semantic cache           →  embed prompt → Qdrant → similar = cached
+✓ Dual-layer pipeline      →  exact first, semantic second, provider third
+✓ Per-agent TTL config     →  different expiry per agent/model
+✓ Cache bypass header      →  X-AgentLedger-No-Cache: true
+✓ Streaming cache replay   →  cached responses replayed as SSE
+✓ Cache analytics          →  hit rate %, $ saved, top cached queries
+```
+
 ## User Story
 > *As a team running customer support agents, I want repeated/similar questions to be served from cache so I stop paying for the same answer twice.*
-
-Real-world example: A customer running an AI customer support agent used naive MCP (all 200+ tool definitions exposed per request) across eight servers. By enabling code mode alone, they cut tokens per request by 55%. Adding semantic caching for common FAQ inquiries reduced inference calls by another 40%.
 
 ## Tasks
 
@@ -26,18 +40,21 @@ Real-world example: A customer running an AI customer support agent used naive M
 | 2.8 | **Conversation-aware guard** — don't cache if messages contain unique user context (configurable heuristic) | Quality protection | 1 day |
 
 ## Acceptance Criteria
-- [ ] Exact-match cache: <1ms lookup, 100% precision (identical request = identical response)
-- [ ] Semantic cache: <25ms lookup, >90% precision at 0.92 similarity threshold
-- [ ] Cache hit rate >30% on test suite of 1000 diverse customer support queries
-- [ ] Estimated savings displayed matches actual saved API calls within 10%
-- [ ] Cached streaming responses are byte-compatible with live streaming responses
-- [ ] Cache bypass header works — request always hits provider when set
-- [ ] No stale responses served after TTL expiry
-- [ ] Semantic lookup adds 5-20ms for vector search, but saves 1-5s by skipping LLM call. For cache hits, responses are typically 2-4x faster.
-- [ ] Dashboard shows: `$X saved this week via caching` with drill-down by agent
+```
+□ Exact cache: <1ms lookup, 100% precision
+□ Semantic cache: <25ms lookup, >90% precision at 0.92 threshold
+□ Cache hit rate >30% on 1000 diverse customer support queries
+□ Dashboard shows "$X saved this week via caching"
+□ Cached streaming responses byte-compatible with live responses
+```
+- [ ] Estimated savings matches actual saved API calls within 10%
+- [ ] Cache bypass header works — always hits provider when set
+- [ ] No stale responses after TTL expiry
+- [ ] Semantic lookup 5-20ms, saves 1-5s by skipping LLM call. Hits typically 2-4x faster.
+- [ ] Drill-down by agent
 
 ## Definition of Done
-- [ ] Blog post: "How we saved $X with semantic caching — benchmarks included"
+- [ ] Blog post: "How we saved $X with semantic caching — benchmarks included" / "We eliminated 35% of our LLM bill with semantic caching"
 - [ ] Benchmark suite: 1000 queries, measured hit rate, latency overhead, cost savings
 - [ ] Integration test with CrewAI multi-agent workflow showing cache hits across agents
 
@@ -45,5 +62,10 @@ Real-world example: A customer running an AI customer support agent used naive M
 4. **Cache Demo:** "Same question rephrased 5 ways → 1 API call instead of 5"
 5. **ROI:** "30% of agent calls are near-duplicates. That's 30% of your bill, eliminated."
 
-## GTM Note
-Helicone is in maintenance mode following Mintlify acquisition — existing deployments keep working, but no active feature dev. Target those 16K orgs with "Migrating from Helicone to AgentLedger in 5 minutes". See [11-gtm-timeline](./11-gtm-timeline.md).
+## Who You Tell
+- Teams with customer support agents (repeat questions = repeat costs)
+- Target Helicone users (maintenance mode post-Mintlify, 16K orgs) + Portkey users (acquired by Palo Alto Networks May 2026, uncertainty) — "Migrating to AgentLedger in 5 minutes"
+- See [11-gtm-timeline](./11-gtm-timeline.md).
+
+## Through Line
+> Phase 2 → "I stopped paying for duplicate calls"
